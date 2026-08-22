@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    container_name: fabricflow_db
+    environment:
+      POSTGRES_USER: fabricflow
+      POSTGRES_PASSWORD: fabricflow123
+      POSTGRES_DB: fabricflow_erp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
