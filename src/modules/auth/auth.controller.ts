@@ -11,7 +11,7 @@ function refreshCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: REFRESH_MAX_AGE_MS,
     path: "/",
   };
@@ -45,7 +45,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
   });
   successResponse(res, result, result.message);

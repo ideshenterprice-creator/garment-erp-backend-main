@@ -14,6 +14,7 @@ const memberSelect = {
   role: true,
   isActive: true,
   createdAt: true,
+  inviteToken: true,
 } as const;
 
 export type TeamMember = {
@@ -23,6 +24,7 @@ export type TeamMember = {
   role: UserRole;
   isActive: boolean;
   createdAt: Date;
+  inviteAccepted: boolean;
 };
 
 export interface InviteResult {
@@ -92,7 +94,7 @@ export async function listMembers(
     where.isActive = filters.isActive;
   }
 
-  const [members, total] = await prisma.$transaction([
+  const [rows, total] = await prisma.$transaction([
     prisma.user.findMany({
       where,
       select: memberSelect,
@@ -100,6 +102,11 @@ export async function listMembers(
     }),
     prisma.user.count({ where }),
   ]);
+
+  const members: TeamMember[] = rows.map(({ inviteToken, ...member }) => ({
+    ...member,
+    inviteAccepted: inviteToken === null,
+  }));
 
   return { members, total };
 }
