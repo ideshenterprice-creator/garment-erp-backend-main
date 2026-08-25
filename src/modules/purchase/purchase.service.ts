@@ -13,10 +13,25 @@ import {
 
 const billInclude = {
   supplier: {
-    select: { id: true, partyNumber: true, name: true, city: true, country: true, type: true },
+    select: {
+      id: true,
+      partyNumber: true,
+      name: true,
+      city: true,
+      country: true,
+      contact: true,
+      type: true,
+    },
   },
   product: {
-    select: { id: true, productCode: true, name: true, category: true, unit: true },
+    select: {
+      id: true,
+      productCode: true,
+      name: true,
+      category: true,
+      unit: true,
+      gstRate: true,
+    },
   },
   po: {
     select: {
