@@ -93,6 +93,7 @@ export async function list(query: SalesListQuery) {
       include: {
         buyer: { select: { id: true, name: true } },
         po: { select: { id: true, poNumber: true } },
+        items: { select: { quantity: true } },
       },
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.limit,
@@ -119,8 +120,13 @@ export async function list(query: SalesListQuery) {
     pendingPayment += Math.max(0, Number(row.netTotal) - paid);
   }
 
+  const rows = data.map((bill) => ({
+    ...bill,
+    totalPieces: bill.items.reduce((sum, item) => sum + item.quantity, 0),
+  }));
+
   return {
-    data,
+    data: rows,
     total,
     page: query.page,
     limit: query.limit,
@@ -137,21 +143,46 @@ export async function getById(id: string) {
   if (!bill) throw new AppError("Sales bill not found", 404, "NOT_FOUND");
   const amountPaid = await sumReceipts(id);
   const outstanding = Number((Number(bill.netTotal) - amountPaid).toFixed(2));
+  const vouchers = await prisma.voucher.findMany({
+    where: { type: "RECEIPT", notes: { startsWith: billTag(id) } },
+    include: { createdBy: { select: { id: true, name: true, email: true } } },
+    orderBy: { date: "asc" },
+  });
+  const paymentHistory = vouchers.map((voucher) => ({
+    id: voucher.id,
+    salesBillId: id,
+    date: voucher.date,
+    paymentMode: voucher.paymentMode,
+    amount: Number(voucher.amount),
+    referenceNo: voucher.referenceNo,
+    processedBy: voucher.createdBy?.name ?? voucher.createdBy?.email ?? "—",
+    status: "SUCCESS" as const,
+  }));
   return {
     ...bill,
+    totalPieces: bill.items.reduce((sum, item) => sum + item.quantity, 0),
+    paymentRecord: {
+      totalPaid: amountPaid,
+      outstanding,
+    },
     payment: {
       amountPaid,
       outstanding,
     },
+    paymentHistory,
   };
 }
 
 export async function create(input: SalesCreateInput) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id: input.poId } });
   if (!po) throw new AppError("Purchase order not found", 404, "NOT_FOUND");
-  if (po.status !== "READY_TO_SHIP" && po.status !== "IN_PRODUCTION") {
+  if (
+    po.status !== "READY_TO_SHIP" &&
+    po.status !== "IN_PRODUCTION" &&
+    po.status !== "ACTIVE"
+  ) {
     throw new AppError(
-      "PO must be READY_TO_SHIP or IN_PRODUCTION to raise a sales bill",
+      "PO must be ACTIVE, READY_TO_SHIP or IN_PRODUCTION to raise a sales bill",
       400,
       "INVALID_PO"
     );
