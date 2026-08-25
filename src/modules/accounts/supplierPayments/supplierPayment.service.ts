@@ -47,7 +47,31 @@ export async function list(query: SupplierPaymentListQuery) {
   const start = (query.page - 1) * query.limit;
   const data = filtered.slice(start, start + query.limit);
 
-  return { data, total: filtered.length, page: query.page, limit: query.limit };
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));
+
+  let totalPending = 0;
+  let totalPaidThisMonth = 0;
+  for (const row of mapped) {
+    totalPending += Math.max(0, row.outstanding);
+    for (const payment of row.payments) {
+      const paidAt = new Date(payment.paymentDate);
+      if (paidAt >= monthStart && paidAt < monthEnd) {
+        totalPaidThisMonth += Number(payment.amountPaid);
+      }
+    }
+  }
+
+  return {
+    data,
+    total: filtered.length,
+    page: query.page,
+    limit: query.limit,
+    summary: {
+      totalPending: Number(totalPending.toFixed(2)),
+      totalPaidThisMonth: Number(totalPaidThisMonth.toFixed(2)),
+    },
+  };
 }
 
 export async function getById(id: string) {
