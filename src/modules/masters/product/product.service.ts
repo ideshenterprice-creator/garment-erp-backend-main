@@ -2,6 +2,7 @@ import { Prisma, ProductCategory, SizeLabel } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { ProductCreateInput, ProductListQuery, ProductStatusInput, ProductUpdateInput } from "./product.schema";
+import { notifyActiveUsers, NotificationType } from "@/modules/notifications/notification.service";
 
 const PRODUCT_PREFIX: Record<ProductCategory, string> = {
   RAW_MATERIAL: "RM-",
@@ -28,7 +29,12 @@ export async function list(query: ProductListQuery) {
   if (query.category) where.category = query.category;
   if (query.isActive !== undefined) where.isActive = query.isActive;
   if (query.search) {
-    where.name = { contains: query.search, mode: "insensitive" };
+    const term = query.search.trim();
+    where.OR = [
+      { name: { contains: term, mode: "insensitive" } },
+      { productCode: { contains: term, mode: "insensitive" } },
+      { description: { contains: term, mode: "insensitive" } },
+    ];
   }
 
   const [rows, total] = await prisma.$transaction([
@@ -75,7 +81,7 @@ export async function create(input: ProductCreateInput) {
       ? input.sizes.map((sizeLabel) => ({ sizeLabel: sizeLabel as SizeLabel }))
       : [];
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
       data: {
         productCode,
@@ -98,6 +104,16 @@ export async function create(input: ProductCreateInput) {
       include: productInclude,
     });
   });
+
+  void notifyActiveUsers({
+    type: NotificationType.PRODUCT_CREATED,
+    title: "Product created",
+    message: `${created.name} (${created.productCode}) was added.`,
+    metadata: { entityType: "PRODUCT", entityId: created.id },
+    dedupeKey: `PRODUCT:${created.id}`,
+  });
+
+  return created;
 }
 
 export async function update(id: string, input: ProductUpdateInput) {

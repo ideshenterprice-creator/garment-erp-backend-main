@@ -2,10 +2,10 @@ import crypto from "crypto";
 import { Prisma, UserRole } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
+import { frontendUrl, inviteTtlMs, isProduction } from "@/config/env";
+import { sendInviteEmail } from "@/services/email/email.service";
+import { notifyAdmins, NotificationType } from "@/modules/notifications/notification.service";
 import { InviteInput, ListMembersQuery } from "./team.schema";
-
-const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
-const FRONTEND_ACCEPT_INVITE_URL = "http://localhost:3000/accept-invite";
 
 const memberSelect = {
   id: true,
@@ -35,24 +35,17 @@ export interface InviteResult {
 function createInviteToken(): { rawToken: string; hashedToken: string; expiresAt: Date } {
   const rawToken = crypto.randomBytes(32).toString("hex");
   const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  const expiresAt = new Date(Date.now() + inviteTtlMs());
   return { rawToken, hashedToken, expiresAt };
 }
 
 function buildInviteLink(rawToken: string): string {
-  return `${FRONTEND_ACCEPT_INVITE_URL}?token=${rawToken}`;
-}
-
-// TODO: Replace with Resend API after domain setup
-function sendInviteEmail(email: string, rawToken: string): void {
-  const inviteLink = buildInviteLink(rawToken);
-  console.log(`Invite email to ${email}`);
-  console.log(`Invite link: ${inviteLink}`);
+  return `${frontendUrl()}/accept-invite?token=${rawToken}`;
 }
 
 function withDevInviteLink(message: string, rawToken: string): InviteResult {
   const result: InviteResult = { message };
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction()) {
     result.inviteLink = buildInviteLink(rawToken);
   }
   return result;
@@ -66,6 +59,7 @@ export async function invite(input: InviteInput): Promise<InviteResult> {
   }
 
   const { rawToken, hashedToken, expiresAt } = createInviteToken();
+  const inviteLink = buildInviteLink(rawToken);
 
   await prisma.user.create({
     data: {
@@ -79,7 +73,15 @@ export async function invite(input: InviteInput): Promise<InviteResult> {
     },
   });
 
-  sendInviteEmail(email, rawToken);
+  await sendInviteEmail(email, inviteLink);
+  void notifyAdmins({
+    type: NotificationType.TEAM_INVITATION,
+    title: "Team invitation sent",
+    message: `${input.name} (${email}) was invited as ${input.role}.`,
+    metadata: { entityType: "USER", email },
+    dedupeKey: `TEAM_INVITE:${email}:${hashedToken.slice(0, 12)}`,
+  });
+
   return withDevInviteLink("Invite sent successfully", rawToken);
 }
 
@@ -145,6 +147,7 @@ export async function resendInvite(id: string): Promise<InviteResult> {
   }
 
   const { rawToken, hashedToken, expiresAt } = createInviteToken();
+  const inviteLink = buildInviteLink(rawToken);
 
   await prisma.user.update({
     where: { id },
@@ -154,6 +157,6 @@ export async function resendInvite(id: string): Promise<InviteResult> {
     },
   });
 
-  sendInviteEmail(user.email, rawToken);
+  await sendInviteEmail(user.email, inviteLink);
   return withDevInviteLink("Invite resent successfully", rawToken);
 }

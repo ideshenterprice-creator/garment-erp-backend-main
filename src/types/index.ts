@@ -39,6 +39,8 @@ export interface SuccessBody<T> {
 
 export interface ErrorBody {
   success: false;
+  message: string;
+  code: string;
   error: {
     code: string;
     message: string;
@@ -50,6 +52,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthPayload;
+      requestId?: string;
     }
   }
 }

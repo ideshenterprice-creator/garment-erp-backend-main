@@ -23,6 +23,8 @@ export function errorResponse(
 ): Response<ErrorBody> {
   return res.status(statusCode).json({
     success: false,
+    message,
+    code,
     error: {
       code,
       message,
@@ -31,6 +33,6 @@ export function errorResponse(
   });
 }
 
-export function getRequestId(_req: Request): string | undefined {
-  return undefined;
+export function getRequestId(req: Request): string | undefined {
+  return req.requestId;
 }

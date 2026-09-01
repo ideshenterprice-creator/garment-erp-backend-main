@@ -1,3 +1,4 @@
+import { toCsv } from "@/utils/csv";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { StatementQuery } from "./statement.schema";
@@ -67,4 +68,22 @@ export async function partyStatement(query: StatementQuery) {
     closingBalance,
     balanceType,
   };
+}
+
+export async function partyStatementCsv(query: StatementQuery): Promise<{ filename: string; csv: string }> {
+  const statement = await partyStatement(query);
+  const csv = toCsv(
+    ["Date", "Description", "Reference Type", "Reference Id", "Debit", "Credit", "Balance"],
+    statement.transactions.map((row) => [
+      new Date(row.date).toISOString().slice(0, 10),
+      row.description,
+      row.referenceType,
+      row.referenceId,
+      row.debit,
+      row.credit,
+      row.balance,
+    ])
+  );
+  const safeName = statement.party.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return { filename: `account-statement-${safeName}.csv`, csv };
 }

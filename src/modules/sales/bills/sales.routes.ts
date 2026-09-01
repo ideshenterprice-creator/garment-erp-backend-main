@@ -138,6 +138,30 @@ router.patch(
 
 /**
  * @openapi
+ * /api/sales/bills/{id}/pdf:
+ *   get:
+ *     tags: [Sales - Bills]
+ *     summary: Download a server-generated sales bill PDF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get("/:id/pdf", validate(idParamsSchema, "params"), controller.invoicePdf);
+
+/**
+ * @openapi
  * /api/sales/bills/{id}:
  *   get:
  *     tags: [Sales - Bills]
@@ -157,6 +181,39 @@ router.get("/:id", validate(idParamsSchema, "params"), controller.getById);
 
 export const salesRegisterRouter = Router();
 salesRegisterRouter.use(authenticate, requireTeamMember);
+
+/**
+ * @openapi
+ * /api/sales/register/export:
+ *   get:
+ *     tags: [Sales - Bills]
+ *     summary: Export sales register as CSV
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: buyerId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: poId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: CSV file
+ */
+salesRegisterRouter.get(
+  "/register/export",
+  validate(salesRegisterQuerySchema, "query"),
+  controller.registerExport
+);
 
 /**
  * @openapi

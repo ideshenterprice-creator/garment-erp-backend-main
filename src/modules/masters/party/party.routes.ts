@@ -156,4 +156,31 @@ router.put(
   controller.update
 );
 
+/**
+ * @openapi
+ * /api/masters/parties/{id}:
+ *   delete:
+ *     tags: [Masters - Party]
+ *     summary: Permanently delete a party
+ *     description: Admin only. Fails if the party is linked to transactions.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Party deleted
+ *       409:
+ *         description: Party linked to existing transactions
+ */
+router.delete(
+  "/parties/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
+
 export default router;

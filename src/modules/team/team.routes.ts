@@ -15,7 +15,7 @@ router.use(authenticate, requireAdmin);
  *   post:
  *     tags: [Team]
  *     summary: Invite a team member by email
- *     description: Admin only. Creates an inactive user and logs an invite link until Resend is configured.
+ *     description: Admin only. Creates an inactive user and sends an invitation email via Resend.
  *     security:
  *       - bearerAuth: []
  *     requestBody:

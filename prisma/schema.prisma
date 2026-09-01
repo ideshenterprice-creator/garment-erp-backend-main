@@ -1,10 +1,16 @@
+// Installed Prisma is 5.22.0. In this version, `url` and `directUrl`
+// belong in schema.prisma (Prisma 7 moved them to prisma.config.ts).
+// If the editor flags these fields, pin the Prisma extension to v6:
+// Command Palette → "Prisma: Pin to Prisma 6" or prisma.pinToPrisma6.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -176,6 +182,8 @@ model User {
   stockTransactions StockTransaction[]
   issuesCreated     IssueRecord[]
   vouchersCreated   Voucher[]
+  notifications     Notification[]
+  filesUploaded     FileAttachment[]
 
   @@index([email])
   @@index([role])
@@ -229,6 +237,8 @@ model Party {
 
   @@index([type])
   @@index([name])
+  @@index([gstNumber])
+  @@index([partyNumber])
 }
 
 model Product {
@@ -295,6 +305,44 @@ model GSTRate {
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([category])
+  @@index([applicableOn])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([type])
+}
+
+model FileAttachment {
+  id           String   @id @default(uuid())
+  bucket       String
+  objectPath   String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  entityType   String
+  entityId     String
+  uploadedById String
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([bucket, objectPath])
+  @@index([entityType, entityId])
+  @@index([uploadedById])
 }
 
 model KarigarProfile {

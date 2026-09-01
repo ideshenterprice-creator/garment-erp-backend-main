@@ -1,6 +1,7 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import fs from "fs";
 import path from "path";
+import { backendUrl } from "@/config/env";
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -9,12 +10,12 @@ const options: swaggerJsdoc.Options = {
       title: "FabricFlow ERP API",
       version: "1.0.0",
       description:
-        "Backend API for FabricFlow ERP — baby garments export manufacturing (fabric, production, boxing, sales, accounts).",
+        "Backend API for FabricFlow ERP — garment manufacturing (masters, purchase, inventory, production, boxing, sales, accounts, team, notifications).",
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT ?? "5000"}`,
-        description: "Local development",
+        url: backendUrl(),
+        description: process.env.NODE_ENV === "production" ? "Production" : "Local development",
       },
     ],
     components: {

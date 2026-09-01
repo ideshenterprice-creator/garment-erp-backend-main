@@ -28,3 +28,7 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
     "Party status updated"
   );
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Party deleted");
+});

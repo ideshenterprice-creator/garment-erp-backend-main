@@ -8,6 +8,8 @@ import { statementQuerySchema } from "./statement.schema";
 const router = Router();
 router.use(authenticate, requireTeamMember);
 
+router.get("/export", validate(statementQuerySchema, "query"), controller.exportStatement);
+
 /**
  * @openapi
  * /api/accounts/statement:

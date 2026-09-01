@@ -36,3 +36,18 @@ export const markReturned = asyncHandler(async (req: Request, res: Response) => 
 export const register = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.register(req.query as unknown as SalesRegisterQuery), "Sales register loaded");
 });
+
+export const registerExport = asyncHandler(async (req: Request, res: Response) => {
+  const { filename, csv } = await service.registerCsv(req.query as unknown as SalesRegisterQuery);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(csv);
+});
+
+export const invoicePdf = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError("Authentication required", 401, "UNAUTHORIZED");
+  const { filename, buffer } = await service.invoicePdf(req.params.id, req.user.userId);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(buffer);
+});

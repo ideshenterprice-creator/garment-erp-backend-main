@@ -4,6 +4,11 @@ import { AppError } from "@/middleware/errorHandler";
 import { generatePBNumber } from "@/utils/generateId";
 import { createLedgerEntry } from "@/utils/ledgerHelper";
 import { validateStock } from "@/utils/stockValidator";
+import { toCsv } from "@/utils/csv";
+import {
+  notifyActiveUsers,
+  NotificationType,
+} from "@/modules/notifications/notification.service";
 import {
   PurchaseCreateInput,
   PurchaseListQuery,
@@ -303,6 +308,14 @@ export async function confirm(id: string, userId: string) {
     return updated;
   });
 
+  void notifyActiveUsers({
+    type: NotificationType.PURCHASE_RECEIVED,
+    title: "Purchase received",
+    message: `Purchase bill ${confirmed.billNumber} was confirmed and stock updated.`,
+    metadata: { entityType: "PURCHASE_BILL", entityId: confirmed.id },
+    dedupeKey: `PURCHASE_RECEIVED:${confirmed.id}`,
+  });
+
   return {
     ...confirmed,
     stockUpdate: {
@@ -438,4 +451,25 @@ export async function register(query: PurchaseRegisterQuery) {
       totalNetTotal: round2(rows.reduce((sum, row) => sum + row.netTotal, 0)),
     },
   };
+}
+
+export async function registerCsv(query: PurchaseRegisterQuery): Promise<{ filename: string; csv: string }> {
+  const data = await register(query);
+  const csv = toCsv(
+    ["Bill Number", "Date", "Supplier", "Fabric", "Qty", "Rate", "Taxable", "GST", "Net Total", "Outstanding", "Status"],
+    data.bills.map((bill) => [
+      bill.billNumber,
+      new Date(bill.date).toISOString().slice(0, 10),
+      bill.supplier.name,
+      bill.fabricType.name,
+      bill.qty,
+      bill.rate,
+      bill.total,
+      bill.gst,
+      bill.netTotal,
+      bill.outstanding,
+      bill.status,
+    ])
+  );
+  return { filename: "purchase-register.csv", csv };
 }

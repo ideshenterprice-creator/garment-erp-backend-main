@@ -8,7 +8,7 @@ describe("Production", () => {
   });
 
   it("requires auth for bundles", async () => {
-    const res = await request(app).get("/api/bundles");
+    const res = await request(app).get("/api/production/bundles");
     expect(res.status).toBe(401);
   });
 });

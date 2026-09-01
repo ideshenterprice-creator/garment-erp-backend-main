@@ -1,10 +1,27 @@
+import rateLimit from "express-rate-limit";
 import { Router } from "express";
-import { authenticate } from "@/middleware/auth";
+import { authenticate, authenticateAllowInactive } from "@/middleware/auth";
 import { validate } from "@/middleware/validate";
 import * as controller from "./auth.controller";
 import { acceptInviteSchema, loginSchema } from "./auth.schema";
 
 const router = Router();
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many login attempts. Try again later.",
+    code: "RATE_LIMITED",
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many login attempts. Try again later.",
+    },
+  },
+});
 
 /**
  * @openapi
@@ -36,7 +53,7 @@ const router = Router();
  *       403:
  *         description: Account not activated
  */
-router.post("/login", validate(loginSchema), controller.login);
+router.post("/login", loginLimiter, validate(loginSchema), controller.login);
 
 /**
  * @openapi
@@ -74,7 +91,7 @@ router.post("/refresh", controller.refresh);
  *       401:
  *         description: Missing or invalid access token
  */
-router.post("/logout", authenticate, controller.logout);
+router.post("/logout", authenticateAllowInactive, controller.logout);
 
 /**
  * @openapi

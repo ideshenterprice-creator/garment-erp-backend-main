@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../garment-erp-frontend-main"
+        }
+    ],
+    "settings": {
+        "prisma.pinToPrisma6": true
+    },
+    "extensions": {
+        "recommendations": ["Prisma.prisma"]
+    }
+}

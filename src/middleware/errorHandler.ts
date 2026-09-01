@@ -25,15 +25,24 @@ export const asyncHandler =
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
-  logger.error(err);
+  logger.error("Request failed", {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    error: err instanceof Error ? err.message : "unknown",
+  });
+
+  const exposeDetails = process.env.NODE_ENV !== "production";
 
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,
+      message: err.message,
+      code: err.code,
       error: {
         code: err.code,
         message: err.message,
@@ -46,6 +55,8 @@ export function errorHandler(
   if (err instanceof ZodError) {
     res.status(400).json({
       success: false,
+      message: "Request validation failed",
+      code: "VALIDATION_ERROR",
       error: {
         code: "VALIDATION_ERROR",
         message: "Request validation failed",
@@ -59,10 +70,12 @@ export function errorHandler(
     if (err.code === "P2002") {
       res.status(409).json({
         success: false,
+        message: "Already exists",
+        code: "ALREADY_EXISTS",
         error: {
           code: "ALREADY_EXISTS",
           message: "Already exists",
-          details: err.meta,
+          ...(exposeDetails ? { details: err.meta } : {}),
         },
       });
       return;
@@ -70,31 +83,34 @@ export function errorHandler(
     if (err.code === "P2025") {
       res.status(404).json({
         success: false,
+        message: "Record not found",
+        code: "NOT_FOUND",
         error: {
           code: "NOT_FOUND",
           message: "Record not found",
-          details: err.meta,
         },
       });
       return;
     }
     res.status(400).json({
       success: false,
+      message: "Database request failed",
+      code: "DATABASE_ERROR",
       error: {
-        code: err.code,
+        code: "DATABASE_ERROR",
         message: "Database request failed",
-        details: err.meta,
       },
     });
     return;
   }
 
-  const message = err instanceof Error ? err.message : "Internal server error";
   res.status(500).json({
     success: false,
+    message: "Internal server error",
+    code: "INTERNAL_ERROR",
     error: {
       code: "INTERNAL_ERROR",
-      message: process.env.NODE_ENV === "production" ? "Internal server error" : message,
+      message: "Internal server error",
     },
   });
 }

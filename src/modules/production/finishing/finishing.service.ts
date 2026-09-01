@@ -92,7 +92,7 @@ export async function create(input: FinishingCreateInput, userId: string) {
   const requiredOps = await assignedOperationIds(input.karigarId, "FINISHING");
   const fgProduct = await findFinishedGoodProduct();
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const entry = await tx.finishingEntry.create({
       data: {
         entryNumber,
@@ -155,4 +155,23 @@ export async function create(input: FinishingCreateInput, userId: string) {
       allFinishingDone: allDone,
     };
   });
+
+  if (result.allFinishingDone) {
+    const { notifyActiveUsers, NotificationType } = await import(
+      "@/modules/notifications/notification.service"
+    );
+    void notifyActiveUsers({
+      type: NotificationType.PRODUCTION_COMPLETED,
+      title: "Production completed",
+      message: `Bundle ${bundle.bundleNumber} finished and moved to boxing.`,
+      metadata: {
+        entityType: "BUNDLE",
+        entityId: bundle.id,
+        bundleNumber: bundle.bundleNumber,
+      },
+      dedupeKey: `PRODUCTION_COMPLETED:${bundle.id}`,
+    });
+  }
+
+  return result;
 }

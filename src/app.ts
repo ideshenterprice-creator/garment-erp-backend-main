@@ -6,7 +6,12 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "@/config/swagger";
+import prisma from "@/config/database";
+import logger from "@/config/logger";
+import { isAllowedCorsOrigin, isProduction } from "@/config/env";
 import { errorHandler } from "@/middleware/errorHandler";
+import { requestId } from "@/middleware/requestId";
+import { errorResponse } from "@/utils/apiResponse";
 import authRoutes from "@/modules/auth/auth.routes";
 import teamRoutes from "@/modules/team/team.routes";
 import partyRoutes from "@/modules/masters/party/party.routes";
@@ -34,25 +39,55 @@ import supplierPaymentRoutes from "@/modules/accounts/supplierPayments/supplierP
 import voucherRoutes from "@/modules/accounts/vouchers/voucher.routes";
 import ledgerRoutes from "@/modules/accounts/ledger/ledger.routes";
 import statementRoutes from "@/modules/accounts/statement/statement.routes";
+import notificationRoutes from "@/modules/notifications/notification.routes";
+import searchRoutes from "@/modules/search/search.routes";
+import attachmentRoutes from "@/modules/attachments/attachment.routes";
+import { isStorageConfigured, pingStorage } from "@/services/storage/supabase-storage.service";
 
 const app: Application = express();
 
-app.use(helmet({ contentSecurityPolicy: false }));
+if (isProduction()) {
+  app.set("trust proxy", 1);
+}
+
+app.use(requestId);
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    referrerPolicy: { policy: "no-referrer" },
+  })
+);
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+    origin(origin, callback) {
+      if (isAllowedCorsOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      logger.warn("CORS origin rejected", { origin });
+      callback(null, false);
+    },
     credentials: true,
   })
 );
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: Number(process.env.RATE_LIMIT_MAX ?? 1000),
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) =>
+      req.path === "/health" || req.path === "/health/db" || req.path === "/health/storage",
   })
 );
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+morgan.token("request-id", (req) => (req as express.Request).requestId ?? "-");
+app.use(
+  morgan(
+    isProduction()
+      ? ":remote-addr :method :url :status :res[content-length] - :response-time ms :request-id"
+      : "dev"
+  )
+);
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 
@@ -61,7 +96,7 @@ app.use(express.json({ limit: "2mb" }));
  * /health:
  *   get:
  *     tags: [System]
- *     summary: Health check
+ *     summary: Liveness check
  *     security: []
  *     responses:
  *       200:
@@ -71,10 +106,93 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
-app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+/**
+ * @openapi
+ * /health/db:
+ *   get:
+ *     tags: [System]
+ *     summary: Database connectivity check
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Database is reachable
+ *       503:
+ *         description: Database is unreachable
+ */
+app.get("/health/db", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: "ok", database: "connected" });
+  } catch {
+    logger.error("Database health check failed");
+    res.status(503).json({
+      success: false,
+      message: "Database unavailable",
+      code: "DB_UNAVAILABLE",
+      status: "error",
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /health/storage:
+ *   get:
+ *     tags: [System]
+ *     summary: Supabase Storage connectivity check
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Storage is reachable
+ *       503:
+ *         description: Storage is not configured or unreachable
+ */
+app.get("/health/storage", async (_req, res) => {
+  if (!isStorageConfigured()) {
+    res.status(503).json({
+      success: false,
+      status: "error",
+      storage: "not_configured",
+      message: "Storage is not configured",
+      code: "STORAGE_NOT_CONFIGURED",
+    });
+    return;
+  }
+  try {
+    const result = await pingStorage();
+    if (!result.ok) {
+      res.status(503).json({
+        success: false,
+        status: "error",
+        storage: "unavailable",
+        message: "Storage unavailable",
+        code: "STORAGE_UNAVAILABLE",
+      });
+      return;
+    }
+    res.status(200).json({ status: "ok", storage: "connected" });
+  } catch {
+    logger.error("Storage health check failed");
+    res.status(503).json({
+      success: false,
+      status: "error",
+      storage: "unavailable",
+      message: "Storage unavailable",
+      code: "STORAGE_UNAVAILABLE",
+    });
+  }
+});
+
+const swaggerEnabled = process.env.SWAGGER_ENABLED === "true" || !isProduction();
+if (swaggerEnabled) {
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 app.use("/api/auth", authRoutes);
 app.use("/api/team", teamRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/attachments", attachmentRoutes);
 app.use("/api/masters", partyRoutes);
 app.use("/api/masters", productRoutes);
 app.use("/api/masters", operationsRoutes);
@@ -101,6 +219,10 @@ app.use("/api/accounts/supplier-payments", supplierPaymentRoutes);
 app.use("/api/accounts/vouchers", voucherRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/accounts/statement", statementRoutes);
+
+app.use((req, res) => {
+  errorResponse(res, `Route not found: ${req.method} ${req.path}`, "NOT_FOUND", undefined, 404);
+});
 
 app.use(errorHandler);
 

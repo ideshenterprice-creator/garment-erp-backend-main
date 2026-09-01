@@ -3,11 +3,11 @@ import bcrypt from "bcryptjs";
 import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 import { UserRole } from "@prisma/client";
 import prisma from "@/config/database";
+import { refreshCookieMaxAgeMs } from "@/config/env";
 import { AppError } from "@/middleware/errorHandler";
 import { AcceptInviteInput, LoginInput } from "./auth.schema";
 
 const BCRYPT_ROUNDS = 12;
-const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface AccessTokenPayload {
   userId: string;
@@ -116,7 +116,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     data: {
       token: refreshToken,
       userId: user.id,
-      expiresAt: new Date(Date.now() + REFRESH_MAX_AGE_MS),
+      expiresAt: new Date(Date.now() + refreshCookieMaxAgeMs()),
     },
   });
 
@@ -127,7 +127,9 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   };
 }
 
-export async function refresh(refreshToken: string | undefined): Promise<{ accessToken: string }> {
+export async function refresh(
+  refreshToken: string | undefined
+): Promise<{ accessToken: string; refreshToken: string }> {
   if (!refreshToken) {
     throw new AppError("No refresh token", 401, "UNAUTHORIZED");
   }
@@ -147,6 +149,7 @@ export async function refresh(refreshToken: string | undefined): Promise<{ acces
   }
 
   if (stored.expiresAt < new Date()) {
+    await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
     throw new AppError("Token expired", 401, "UNAUTHORIZED");
   }
 
@@ -160,8 +163,20 @@ export async function refresh(refreshToken: string | undefined): Promise<{ acces
     email: user.email,
     role: user.role,
   });
+  const nextRefreshToken = signRefreshToken({ userId: user.id });
 
-  return { accessToken };
+  await prisma.$transaction([
+    prisma.refreshToken.deleteMany({ where: { token: refreshToken } }),
+    prisma.refreshToken.create({
+      data: {
+        token: nextRefreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + refreshCookieMaxAgeMs()),
+      },
+    }),
+  ]);
+
+  return { accessToken, refreshToken: nextRefreshToken };
 }
 
 export async function logout(refreshToken: string | undefined): Promise<{ message: string }> {
@@ -215,8 +230,8 @@ export async function me(userId: string): Promise<AuthMeUser> {
     },
   });
 
-  if (!user) {
-    throw new AppError("User not found", 404, "NOT_FOUND");
+  if (!user || !user.isActive) {
+    throw new AppError("Invalid or expired access token", 401, "UNAUTHORIZED");
   }
 
   return user;

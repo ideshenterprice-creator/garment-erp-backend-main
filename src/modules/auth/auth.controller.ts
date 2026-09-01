@@ -1,18 +1,19 @@
 import { CookieOptions, Request, Response } from "express";
 import { asyncHandler, AppError } from "@/middleware/errorHandler";
 import { successResponse } from "@/utils/apiResponse";
+import { cookieSameSite, isProduction, refreshCookieMaxAgeMs } from "@/config/env";
 import * as authService from "./auth.service";
 import { AcceptInviteInput, LoginInput } from "./auth.schema";
 
 const REFRESH_COOKIE_NAME = "refreshToken";
-const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function refreshCookieOptions(): CookieOptions {
+  const sameSite = cookieSameSite();
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: REFRESH_MAX_AGE_MS,
+    secure: isProduction() || sameSite === "none",
+    sameSite,
+    maxAge: refreshCookieMaxAgeMs(),
     path: "/",
   };
 }
@@ -37,15 +38,16 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.refresh(readRefreshCookie(req));
-  successResponse(res, result, "Token refreshed");
+  res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, refreshCookieOptions());
+  successResponse(res, { accessToken: result.accessToken }, "Token refreshed");
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.logout(readRefreshCookie(req));
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: refreshCookieOptions().secure,
+    sameSite: refreshCookieOptions().sameSite,
     path: "/",
   });
   successResponse(res, result, result.message);

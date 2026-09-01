@@ -168,6 +168,9 @@ export async function create(input: IssueCreateInput, userId: string) {
     return { ...full, bundleNumber: bundle.bundleNumber, bundle };
   });
 
+  const { maybeNotifyLowStock } = await import("@/modules/notifications/notification.service");
+  void maybeNotifyLowStock(input.productId);
+
   return created;
 }
 

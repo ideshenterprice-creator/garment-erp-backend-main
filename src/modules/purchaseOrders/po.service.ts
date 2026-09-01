@@ -2,6 +2,7 @@ import { IssueType, Prisma, PrismaClient } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { generatePONumber } from "@/utils/generateId";
+import { notifyActiveUsers, NotificationType } from "@/modules/notifications/notification.service";
 import { POCancelInput, POCreateInput, POItemInput, POListQuery, POUpdateInput } from "./po.schema";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -259,7 +260,7 @@ export async function create(input: POCreateInput) {
   const totalPieces = items.reduce((sum, item) => sum + item.totalPieces, 0);
   const poNumber = await generatePONumber(prisma);
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     return tx.purchaseOrder.create({
       data: {
         poNumber,
@@ -280,6 +281,16 @@ export async function create(input: POCreateInput) {
       },
     });
   });
+
+  void notifyActiveUsers({
+    type: NotificationType.PURCHASE_ORDER_CREATED,
+    title: "Purchase order created",
+    message: `PO ${created.poNumber} was created for ${created.buyer.name}.`,
+    metadata: { entityType: "PURCHASE_ORDER", entityId: created.id },
+    dedupeKey: `PO:${created.id}`,
+  });
+
+  return created;
 }
 
 export async function update(id: string, input: POUpdateInput) {

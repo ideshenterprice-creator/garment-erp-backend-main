@@ -46,3 +46,10 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     "Purchase register loaded"
   );
 });
+
+export const registerExport = asyncHandler(async (req: Request, res: Response) => {
+  const { filename, csv } = await service.registerCsv(req.query as unknown as PurchaseRegisterQuery);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(csv);
+});

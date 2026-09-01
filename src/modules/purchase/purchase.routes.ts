@@ -105,6 +105,7 @@ router.post("/bills", requireAdmin, validate(purchaseCreateSchema), controller.c
  *       200:
  *         description: Register rows, summary, and totals
  */
+router.get("/register/export", validate(purchaseRegisterQuerySchema, "query"), controller.registerExport);
 router.get("/register", validate(purchaseRegisterQuerySchema, "query"), controller.register);
 
 /**

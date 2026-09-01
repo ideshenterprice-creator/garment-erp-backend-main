@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { adminCredentials } from "../src/config/adminCredentials";
 
 const prisma = new PrismaClient();
 
@@ -251,15 +252,32 @@ async function upsertLedger(input: {
   }
 }
 
+function assertSeedAllowed(): void {
+  const allow = process.env.ALLOW_PRODUCTION_SEED === "true";
+  const url = process.env.DATABASE_URL ?? "";
+  const looksRemote =
+    process.env.NODE_ENV === "production" ||
+    /supabase\.(co|com)/i.test(url) ||
+    /pooler\.supabase/i.test(url);
+
+  if (looksRemote && !allow) {
+    throw new Error(
+      "Refusing to seed: DATABASE_URL looks like production/Supabase. This seed loads demo ERP data (buyers, bills, payments). Set ALLOW_PRODUCTION_SEED=true only if that is intentional."
+    );
+  }
+}
+
 async function main(): Promise<void> {
+  assertSeedAllowed();
   console.log("Seeding FabricFlow ERP database...");
 
-  // ─── Admin user ───────────────────────────────────────────────
-  const passwordHash = await bcrypt.hash("Admin@123", 12);
+  // ─── Admin user (ADMIN_EMAIL / ADMIN_PASSWORD from .env) ───────
+  const { email: adminEmail, password: adminPassword, name: adminName } = adminCredentials();
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
   const admin = await prisma.user.upsert({
-    where: { email: "admin@gmail.com" },
+    where: { email: adminEmail },
     update: {
-      name: "Admin User",
+      name: adminName,
       password: passwordHash,
       role: "ADMIN",
       isActive: true,
@@ -267,8 +285,8 @@ async function main(): Promise<void> {
       inviteTokenExpiry: null,
     },
     create: {
-      name: "Admin User",
-      email: "admin@gmail.com",
+      name: adminName,
+      email: adminEmail,
       password: passwordHash,
       role: "ADMIN",
       isActive: true,

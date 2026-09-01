@@ -1,15 +1,21 @@
-import { Prisma, SalesBillStatus } from "@prisma/client";
+import { Prisma, SalesBillStatus, TaxType } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { generateInvoiceNumber, generateVoucherNumber } from "@/utils/generateId";
 import { createLedgerEntry } from "@/utils/ledgerHelper";
 import { validateStock } from "@/utils/stockValidator";
+import { toCsv } from "@/utils/csv";
 import {
   findFinishedGoodForDesignSize,
   parseSizeLabel,
   stockAvailable,
   throwStockErrors,
 } from "@/modules/boxing/finishedGoods";
+import {
+  notifyActiveUsers,
+  NotificationType,
+} from "@/modules/notifications/notification.service";
+import { buildSalesBillPdf } from "./salesPdf.service";
 import {
   SalesCreateInput,
   SalesListQuery,
@@ -73,6 +79,37 @@ function monthBounds(now = new Date()): { start: Date; end: Date } {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   return { start, end };
+}
+
+async function computeSalesTax(
+  subTotal: number,
+  currency: string
+): Promise<{ gstAmount: number; taxType: TaxType }> {
+  if (currency.toUpperCase() !== "INR") {
+    return { gstAmount: 0, taxType: "ZERO_RATED" };
+  }
+
+  const rate = await prisma.gSTRate.findFirst({
+    where: {
+      OR: [
+        { applicableOn: { contains: "sales", mode: "insensitive" } },
+        { applicableOn: { contains: "export", mode: "insensitive" } },
+        { applicableOn: { contains: "finished", mode: "insensitive" } },
+        { category: { contains: "garment", mode: "insensitive" } },
+      ],
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!rate || rate.taxType === "ZERO_RATED") {
+    return { gstAmount: 0, taxType: rate?.taxType ?? "ZERO_RATED" };
+  }
+
+  const gstPercent = Number(rate.gstPercent);
+  return {
+    gstAmount: Number(((subTotal * gstPercent) / 100).toFixed(2)),
+    taxType: rate.taxType,
+  };
 }
 
 export async function list(query: SalesListQuery) {
@@ -209,11 +246,12 @@ export async function create(input: SalesCreateInput) {
     amount: Number((item.quantity * item.ratePerPiece).toFixed(2)),
   }));
   const subTotal = Number(items.reduce((sum, item) => sum + item.amount, 0).toFixed(2));
-  const gstAmount = 0;
-  const netTotal = subTotal;
+  const tax = await computeSalesTax(subTotal, input.currency);
+  const gstAmount = tax.gstAmount;
+  const netTotal = Number((subTotal + gstAmount).toFixed(2));
   const invoiceNumber = await generateInvoiceNumber(prisma);
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     return tx.salesBill.create({
       data: {
         invoiceNumber,
@@ -232,6 +270,16 @@ export async function create(input: SalesCreateInput) {
       include,
     });
   });
+
+  void notifyActiveUsers({
+    type: NotificationType.SALES_BILL_CREATED,
+    title: "Sales bill created",
+    message: `Invoice ${created.invoiceNumber} was created.`,
+    metadata: { entityType: "SALES_BILL", entityId: created.id },
+    dedupeKey: `SALES_BILL:${created.id}`,
+  });
+
+  return created;
 }
 
 export async function submit(id: string) {
@@ -332,6 +380,14 @@ export async function recordPayment(id: string, input: SalesPaymentInput, userId
       include,
     });
 
+    void notifyActiveUsers({
+      type: NotificationType.PAYMENT_RECORDED,
+      title: "Payment recorded",
+      message: `Receipt of ${input.amountReceived} recorded against ${bill.invoiceNumber}.`,
+      metadata: { entityType: "SALES_BILL", entityId: bill.id },
+      dedupeKey: `SALES_PAYMENT:${bill.id}:${input.referenceNo ?? input.paymentDate.toISOString()}`,
+    });
+
     return {
       ...updated,
       payment: {
@@ -421,4 +477,104 @@ export async function register(query: SalesRegisterQuery) {
       totalPieces,
     },
   };
+}
+
+export async function registerCsv(query: SalesRegisterQuery): Promise<{ filename: string; csv: string }> {
+  const data = await register(query);
+  const csv = toCsv(
+    [
+      "Invoice Number",
+      "Date",
+      "Buyer",
+      "PO",
+      "Pieces",
+      "Subtotal",
+      "GST",
+      "Net Total",
+      "Amount Paid",
+      "Outstanding",
+      "Status",
+    ],
+    data.bills.map((bill) => [
+      bill.invoiceNumber,
+      new Date(bill.invoiceDate).toISOString().slice(0, 10),
+      bill.buyer?.name ?? "",
+      bill.po?.poNumber ?? "",
+      bill.totalPieces,
+      bill.subTotal,
+      bill.gstAmount,
+      bill.netTotal,
+      bill.amountPaid,
+      bill.outstanding,
+      bill.status,
+    ])
+  );
+  return { filename: `sales-register.csv`, csv };
+}
+
+export async function invoicePdf(id: string, userId?: string): Promise<{ filename: string; buffer: Buffer }> {
+  const bill = await getById(id);
+  const buffer = await buildSalesBillPdf({
+    invoiceNumber: bill.invoiceNumber,
+    invoiceDate: bill.invoiceDate,
+    currency: bill.currency,
+    buyer: {
+      name: bill.buyer.name,
+      contact: bill.buyer.contact,
+      gstNumber: bill.buyer.gstNumber,
+      city: bill.buyer.city,
+      country: bill.buyer.country,
+    },
+    shippingDestination: bill.shippingDestination,
+    paymentTerms: bill.paymentTerms,
+    items: bill.items.map((item) => ({
+      designNumber: item.designNumber,
+      garmentType: item.garmentType,
+      color: item.color,
+      size: item.size,
+      quantity: item.quantity,
+      ratePerPiece: Number(item.ratePerPiece),
+      amount: Number(item.amount),
+    })),
+    subTotal: Number(bill.subTotal),
+    gstAmount: Number(bill.gstAmount),
+    netTotal: Number(bill.netTotal),
+    amountPaid: bill.payment.amountPaid,
+    balance: bill.payment.outstanding,
+    status: bill.status,
+  });
+
+  try {
+    const storage = await import("@/services/storage/supabase-storage.service");
+    if (storage.isStorageConfigured() && userId) {
+      const existing = await prisma.fileAttachment.findFirst({
+        where: { entityType: "SALES_BILL", entityId: bill.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        const objectPath = `sales-bills/${bill.id}/${bill.invoiceNumber}.pdf`;
+        await storage.uploadPrivateObject({
+          objectPath,
+          body: buffer,
+          mimeType: "application/pdf",
+        });
+        await prisma.fileAttachment.create({
+          data: {
+            bucket: process.env.SUPABASE_STORAGE_BUCKET ?? "erp-documents",
+            objectPath,
+            originalName: `${bill.invoiceNumber}.pdf`,
+            mimeType: "application/pdf",
+            sizeBytes: buffer.length,
+            entityType: "SALES_BILL",
+            entityId: bill.id,
+            uploadedById: userId,
+          },
+        });
+      }
+    }
+  } catch {
+    // PDF download still succeeds if storage is unavailable.
+  }
+
+  return { filename: `${bill.invoiceNumber}.pdf`, buffer };
 }

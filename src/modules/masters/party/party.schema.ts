@@ -10,6 +10,7 @@ export const partyCreateSchema = z.object({
   bankAccount: z.string().optional(),
   ifsc: z.string().optional(),
   bankName: z.string().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const partyUpdateSchema = partyCreateSchema.partial();

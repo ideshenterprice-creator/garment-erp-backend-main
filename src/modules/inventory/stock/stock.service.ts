@@ -128,7 +128,7 @@ export async function adjust(productId: string, input: StockAdjustInput, userId:
   const delta = input.adjustmentType === "ADD" ? input.quantity : -input.quantity;
   const note = input.notes ? `${input.reason}: ${input.notes}` : input.reason;
 
-  return prisma.$transaction(async (tx) => {
+  const adjusted = await prisma.$transaction(async (tx) => {
     const updated = await tx.stock.update({
       where: { productId },
       data: { quantity: { increment: delta } },
@@ -154,4 +154,9 @@ export async function adjust(productId: string, input: StockAdjustInput, userId:
 
     return withStatus(updated);
   });
+
+  const { maybeNotifyLowStock } = await import("@/modules/notifications/notification.service");
+  void maybeNotifyLowStock(productId);
+
+  return adjusted;
 }
