@@ -2,10 +2,13 @@ import { Router } from "express";
 import { authenticate } from "@/middleware/auth";
 import { requireAdmin, requireTeamMember } from "@/middleware/roleCheck";
 import { validate } from "@/middleware/validate";
+import { productImageUpload } from "@/middleware/upload";
 import * as controller from "./product.controller";
 import {
   idParamsSchema,
   productCreateSchema,
+  productImageConfirmSchema,
+  productImageUploadUrlSchema,
   productListQuerySchema,
   productStatusSchema,
   productUpdateSchema,
@@ -144,6 +147,88 @@ router.put(
   validate(idParamsSchema, "params"),
   validate(productUpdateSchema),
   controller.update
+);
+
+/**
+ * @openapi
+ * /api/masters/products/{id}/image/upload-url:
+ *   post:
+ *     tags: [Masters - Product]
+ *     summary: Create a short-lived signed URL so the browser can upload the image directly to storage
+ *     security:
+ *       - bearerAuth: []
+ * /api/masters/products/{id}/image/confirm:
+ *   post:
+ *     tags: [Masters - Product]
+ *     summary: Attach a storage object as the product catalog image after a successful direct upload
+ *     security:
+ *       - bearerAuth: []
+ * /api/masters/products/{id}/image:
+ *   post:
+ *     tags: [Masters - Product]
+ *     summary: Upload or replace a product catalog image
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [image]
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: JPEG, PNG, or WebP. Max 5MB.
+ *     responses:
+ *       200:
+ *         description: Product with signed imageUrl
+ *   delete:
+ *     tags: [Masters - Product]
+ *     summary: Remove the product catalog image
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Product with image removed
+ */
+router.post(
+  "/products/:id/image/upload-url",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  validate(productImageUploadUrlSchema),
+  controller.beginImageUpload
+);
+router.post(
+  "/products/:id/image/confirm",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  validate(productImageConfirmSchema),
+  controller.confirmImageUpload
+);
+router.post(
+  "/products/:id/image",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  productImageUpload,
+  controller.uploadImage
+);
+router.delete(
+  "/products/:id/image",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.removeImage
 );
 
 /**

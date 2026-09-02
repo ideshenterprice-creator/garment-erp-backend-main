@@ -1,8 +1,21 @@
+import { randomUUID } from "crypto";
 import { Prisma, ProductCategory, SizeLabel } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
-import { ProductCreateInput, ProductListQuery, ProductStatusInput, ProductUpdateInput } from "./product.schema";
+import logger from "@/config/logger";
+import * as storage from "@/services/storage/supabase-storage.service";
+import {
+  ProductCreateInput,
+  ProductImageConfirmInput,
+  ProductImageUploadUrlInput,
+  ProductListQuery,
+  ProductStatusInput,
+  ProductUpdateInput,
+} from "./product.schema";
 import { notifyActiveUsers, NotificationType } from "@/modules/notifications/notification.service";
+
+const PRODUCT_IMAGE_ENTITY = "PRODUCT";
+const PRODUCT_IMAGE_URL_TTL_SECONDS = 60 * 60 * 24;
 
 const PRODUCT_PREFIX: Record<ProductCategory, string> = {
   RAW_MATERIAL: "RM-",
@@ -16,12 +29,60 @@ const productInclude = {
   stock: true,
 } as const;
 
+type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+type ProductWithoutSizes = Omit<ProductRow, "sizes">;
+type ProductDto = (ProductRow | ProductWithoutSizes) & { imageUrl: string | null };
+
 async function nextProductCode(category: ProductCategory): Promise<string> {
   const prefix = PRODUCT_PREFIX[category];
   const count = await prisma.product.count({
     where: { productCode: { startsWith: prefix } },
   });
   return `${prefix}${String(count + 1).padStart(3, "0")}`;
+}
+
+function stripSizesIfNeeded(product: ProductRow): ProductRow | ProductWithoutSizes {
+  if (product.category !== "FINISHED_GOOD") {
+    const { sizes: _sizes, ...rest } = product;
+    return rest;
+  }
+  return product;
+}
+
+async function withImageUrl<T extends { imagePath: string | null }>(product: T): Promise<T & { imageUrl: string | null }> {
+  if (!product.imagePath || !storage.isStorageConfigured()) {
+    return { ...product, imageUrl: null };
+  }
+  try {
+    const imageUrl = await storage.createSignedUrl(product.imagePath, PRODUCT_IMAGE_URL_TTL_SECONDS);
+    return { ...product, imageUrl };
+  } catch {
+    return { ...product, imageUrl: null };
+  }
+}
+
+async function withImageUrls<T extends { imagePath: string | null }>(
+  products: T[]
+): Promise<Array<T & { imageUrl: string | null }>> {
+  const paths = products.map((product) => product.imagePath).filter((path): path is string => Boolean(path));
+  let urlMap = new Map<string, string>();
+  if (paths.length > 0 && storage.isStorageConfigured()) {
+    try {
+      urlMap = await storage.createSignedUrls(paths, PRODUCT_IMAGE_URL_TTL_SECONDS);
+    } catch (error) {
+      logger.warn("Failed to sign product image URLs", {
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+  return products.map((product) => ({
+    ...product,
+    imageUrl: product.imagePath ? urlMap.get(product.imagePath) ?? null : null,
+  }));
+}
+
+async function toProductDto(product: ProductRow): Promise<ProductDto> {
+  return withImageUrl(stripSizesIfNeeded(product));
 }
 
 export async function list(query: ProductListQuery) {
@@ -48,13 +109,8 @@ export async function list(query: ProductListQuery) {
     prisma.product.count({ where }),
   ]);
 
-  const data = rows.map((product) => {
-    if (product.category !== "FINISHED_GOOD") {
-      const { sizes: _sizes, ...rest } = product;
-      return rest;
-    }
-    return product;
-  });
+  const shaped = rows.map(stripSizesIfNeeded);
+  const data = await withImageUrls(shaped);
 
   return { data, total, page: query.page, limit: query.limit };
 }
@@ -67,11 +123,7 @@ export async function getById(id: string) {
   if (!product) {
     throw new AppError("Product not found", 404, "NOT_FOUND");
   }
-  if (product.category !== "FINISHED_GOOD") {
-    const { sizes: _sizes, ...rest } = product;
-    return rest;
-  }
-  return product;
+  return toProductDto(product);
 }
 
 export async function create(input: ProductCreateInput) {
@@ -113,7 +165,7 @@ export async function create(input: ProductCreateInput) {
     dedupeKey: `PRODUCT:${created.id}`,
   });
 
-  return created;
+  return toProductDto(created);
 }
 
 export async function update(id: string, input: ProductUpdateInput) {
@@ -124,7 +176,7 @@ export async function update(id: string, input: ProductUpdateInput) {
 
   const category = input.category ?? existing.category;
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     if (input.sizes && category === "FINISHED_GOOD") {
       await tx.productSize.deleteMany({ where: { productId: id } });
       if (input.sizes.length) {
@@ -149,6 +201,7 @@ export async function update(id: string, input: ProductUpdateInput) {
       include: productInclude,
     });
   });
+  return toProductDto(updated);
 }
 
 export async function updateStatus(id: string, input: ProductStatusInput) {
@@ -156,11 +209,233 @@ export async function updateStatus(id: string, input: ProductStatusInput) {
   if (!existing) {
     throw new AppError("Product not found", 404, "NOT_FOUND");
   }
-  return prisma.product.update({
+  const updated = await prisma.product.update({
     where: { id },
     data: { isActive: input.isActive },
     include: productInclude,
   });
+  return toProductDto(updated);
+}
+
+function assertStorageConfigured(): void {
+  if (!storage.isStorageConfigured()) {
+    throw new AppError(
+      "File storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      503,
+      "STORAGE_NOT_CONFIGURED"
+    );
+  }
+}
+
+function assertProductImagePath(productId: string, objectPath: string): void {
+  const prefix = `products/${productId}/`;
+  if (
+    !objectPath.startsWith(prefix) ||
+    objectPath.includes("..") ||
+    objectPath.includes("\\") ||
+    !/\.(jpg|jpeg|png|webp)$/i.test(objectPath)
+  ) {
+    throw new AppError("Invalid image path", 400, "INVALID_PATH");
+  }
+}
+
+async function persistProductImage(input: {
+  productId: string;
+  userId: string;
+  objectPath: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  previousPath: string | null;
+}): Promise<ProductRow> {
+  const bucket = storage.storageBucket();
+
+  await prisma.product.update({
+    where: { id: input.productId },
+    data: { imagePath: input.objectPath },
+  });
+
+  try {
+    await prisma.fileAttachment.upsert({
+      where: {
+        bucket_objectPath: { bucket, objectPath: input.objectPath },
+      },
+      create: {
+        bucket,
+        objectPath: input.objectPath,
+        originalName: storage.sanitizeFilename(input.originalName),
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        entityType: PRODUCT_IMAGE_ENTITY,
+        entityId: input.productId,
+        uploadedById: input.userId,
+      },
+      update: {
+        originalName: storage.sanitizeFilename(input.originalName),
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        entityType: PRODUCT_IMAGE_ENTITY,
+        entityId: input.productId,
+        uploadedById: input.userId,
+      },
+    });
+    if (input.previousPath && input.previousPath !== input.objectPath) {
+      await prisma.fileAttachment.deleteMany({
+        where: {
+          entityType: PRODUCT_IMAGE_ENTITY,
+          entityId: input.productId,
+          objectPath: input.previousPath,
+        },
+      });
+    }
+  } catch (error) {
+    logger.warn("Product image audit record failed", {
+      productId: input.productId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+
+  if (input.previousPath && input.previousPath !== input.objectPath) {
+    await storage.removePrivateObject(input.previousPath);
+  }
+
+  return prisma.product.findUniqueOrThrow({
+    where: { id: input.productId },
+    include: productInclude,
+  });
+}
+
+export async function beginImageUpload(id: string, input: ProductImageUploadUrlInput) {
+  assertStorageConfigured();
+
+  const existing = await prisma.product.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) {
+    throw new AppError("Product not found", 404, "NOT_FOUND");
+  }
+
+  const mimeType = storage.normalizeImageMime(input.mimeType, input.fileName);
+  if (!mimeType) {
+    throw new AppError("Only JPEG, PNG, and WebP images are allowed", 400, "INVALID_FILE");
+  }
+
+  const ext = storage.extensionForImageMime(mimeType);
+  const objectPath = `products/${id}/${randomUUID()}${ext}`;
+  const signed = await storage.createSignedUploadUrl(objectPath);
+
+  return {
+    uploadUrl: signed.signedUrl,
+    token: signed.token,
+    objectPath: signed.objectPath,
+    mimeType,
+    maxBytes: 5 * 1024 * 1024,
+  };
+}
+
+export async function confirmImageUpload(
+  id: string,
+  input: ProductImageConfirmInput,
+  userId: string
+) {
+  assertStorageConfigured();
+  assertProductImagePath(id, input.objectPath);
+
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    include: productInclude,
+  });
+  if (!existing) {
+    throw new AppError("Product not found", 404, "NOT_FOUND");
+  }
+
+  let uploaded = await storage.objectExists(input.objectPath);
+  for (let attempt = 0; !uploaded && attempt < 4; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    uploaded = await storage.objectExists(input.objectPath);
+  }
+  if (!uploaded) {
+    throw new AppError("Image was not uploaded. Select the file and try again.", 400, "IMAGE_NOT_UPLOADED");
+  }
+
+  const mimeType = storage.normalizeImageMime(input.mimeType, input.originalName) ?? input.mimeType;
+  const updated = await persistProductImage({
+    productId: id,
+    userId,
+    objectPath: input.objectPath,
+    originalName: input.originalName,
+    mimeType,
+    sizeBytes: input.sizeBytes,
+    previousPath: existing.imagePath,
+  });
+  return toProductDto(updated);
+}
+
+export async function uploadImage(
+  id: string,
+  file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+  userId: string
+) {
+  assertStorageConfigured();
+
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    include: productInclude,
+  });
+  if (!existing) {
+    throw new AppError("Product not found", 404, "NOT_FOUND");
+  }
+
+  const { mimeType } = storage.validateImageUpload({
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    body: file.buffer,
+  });
+  const ext = storage.extensionForImageMime(mimeType);
+  const objectPath = `products/${id}/${randomUUID()}${ext}`;
+
+  const uploaded = await storage.uploadPrivateObject({
+    objectPath,
+    body: file.buffer,
+    mimeType,
+  });
+
+  const updated = await persistProductImage({
+    productId: id,
+    userId,
+    objectPath: uploaded.objectPath,
+    originalName: file.originalname,
+    mimeType,
+    sizeBytes: file.size,
+    previousPath: existing.imagePath,
+  });
+  return toProductDto(updated);
+}
+
+export async function removeImage(id: string) {
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    include: productInclude,
+  });
+  if (!existing) {
+    throw new AppError("Product not found", 404, "NOT_FOUND");
+  }
+  if (!existing.imagePath) {
+    return toProductDto(existing);
+  }
+
+  const previousPath = existing.imagePath;
+  await prisma.$transaction(async (tx) => {
+    await tx.product.update({ where: { id }, data: { imagePath: null } });
+    await tx.fileAttachment.deleteMany({
+      where: { entityType: PRODUCT_IMAGE_ENTITY, entityId: id, objectPath: previousPath },
+    });
+  });
+  await storage.removePrivateObject(previousPath);
+
+  const updated = await prisma.product.findUniqueOrThrow({
+    where: { id },
+    include: productInclude,
+  });
+  return toProductDto(updated);
 }
 
 async function assertProductCanBeDeleted(id: string): Promise<void> {
@@ -189,13 +464,30 @@ async function assertProductCanBeDeleted(id: string): Promise<void> {
 }
 
 export async function remove(id: string): Promise<{ id: string; message: string }> {
-  await getById(id);
+  const product = await prisma.product.findUnique({ where: { id } });
+  if (!product) {
+    throw new AppError("Product not found", 404, "NOT_FOUND");
+  }
   await assertProductCanBeDeleted(id);
 
   await prisma.$transaction(async (tx) => {
+    await tx.fileAttachment.deleteMany({
+      where: { entityType: PRODUCT_IMAGE_ENTITY, entityId: id },
+    });
     await tx.stock.deleteMany({ where: { productId: id } });
     await tx.product.delete({ where: { id } });
   });
+
+  if (product.imagePath) {
+    try {
+      await storage.removePrivateObject(product.imagePath);
+    } catch (error) {
+      logger.warn("Failed to delete product image from storage", {
+        productId: id,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
 
   return { id, message: "Product deleted permanently" };
 }

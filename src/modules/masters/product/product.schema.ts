@@ -39,7 +39,26 @@ export const idParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
+const imageMimeSchema = z
+  .enum(["image/jpeg", "image/jpg", "image/png", "image/webp"])
+  .transform((value) => (value === "image/jpg" ? "image/jpeg" : value));
+
+export const productImageUploadUrlSchema = z.object({
+  fileName: z.string().min(1).max(200),
+  mimeType: imageMimeSchema,
+  sizeBytes: z.coerce.number().int().positive().max(5 * 1024 * 1024),
+});
+
+export const productImageConfirmSchema = z.object({
+  objectPath: z.string().min(8).max(500),
+  originalName: z.string().min(1).max(200),
+  mimeType: imageMimeSchema,
+  sizeBytes: z.coerce.number().int().positive().max(5 * 1024 * 1024),
+});
+
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
 export type ProductStatusInput = z.infer<typeof productStatusSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+export type ProductImageUploadUrlInput = z.infer<typeof productImageUploadUrlSchema>;
+export type ProductImageConfirmInput = z.infer<typeof productImageConfirmSchema>;
