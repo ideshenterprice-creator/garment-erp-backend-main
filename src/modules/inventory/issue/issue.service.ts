@@ -4,6 +4,7 @@ import { AppError } from "@/middleware/errorHandler";
 import { generateBundleNumber, generateIssueNumber } from "@/utils/generateId";
 import { validateStock } from "@/utils/stockValidator";
 import { updatePOStatus } from "@/modules/purchaseOrders/po.service";
+import { reverseStockByReference } from "@/utils/stockReverse";
 import { IssueCreateInput, IssueListQuery, IssueReturnInput } from "./issue.schema";
 
 const issueInclude = {
@@ -219,4 +220,45 @@ export async function markReturned(id: string, input: IssueReturnInput, userId: 
 
     return updated;
   });
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  const issue = await prisma.issueRecord.findUnique({ where: { id } });
+  if (!issue) throw new AppError("Issue record not found", 404, "NOT_FOUND");
+
+  const bundles = await prisma.bundle.findMany({
+    where: { issueId: id },
+    select: { id: true },
+  });
+  const bundleIds = bundles.map((bundle) => bundle.id);
+  if (bundleIds.length > 0) {
+    const [cutting, printing, coloring, stitching, finishing] = await Promise.all([
+      prisma.cuttingEntry.count({ where: { bundleId: { in: bundleIds } } }),
+      prisma.printingEntry.count({ where: { bundleId: { in: bundleIds } } }),
+      prisma.coloringEntry.count({ where: { bundleId: { in: bundleIds } } }),
+      prisma.stitchingEntry.count({ where: { bundleId: { in: bundleIds } } }),
+      prisma.finishingEntry.count({ where: { bundleId: { in: bundleIds } } }),
+    ]);
+    const blockers: string[] = [];
+    if (cutting > 0) blockers.push(`${cutting} cutting entry(ies)`);
+    if (printing > 0) blockers.push(`${printing} printing entry(ies)`);
+    if (coloring > 0) blockers.push(`${coloring} coloring entry(ies)`);
+    if (stitching > 0) blockers.push(`${stitching} stitching entry(ies)`);
+    if (finishing > 0) blockers.push(`${finishing} finishing entry(ies)`);
+    if (blockers.length > 0) {
+      throw new AppError(
+        `Cannot delete issue linked to ${blockers.join(", ")}. Delete those first.`,
+        409,
+        "ISSUE_IN_USE"
+      );
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await reverseStockByReference(tx, ["ISSUE", "ISSUE_RETURN"], id);
+    await tx.bundle.deleteMany({ where: { issueId: id } });
+    await tx.issueRecord.delete({ where: { id } });
+  });
+
+  return { id, message: "Deleted permanently" };
 }

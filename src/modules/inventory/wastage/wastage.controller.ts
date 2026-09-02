@@ -30,3 +30,7 @@ export const markSold = asyncHandler(async (req: Request, res: Response) => {
   }
   successResponse(res, await service.markSold(req.params.id, req.user.userId), "Wastage marked sold");
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Wastage deleted");
+});

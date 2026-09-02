@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { createLedgerEntry } from "@/utils/ledgerHelper";
+import { deleteLedgerByReference } from "@/utils/stockReverse";
 import { NoteCreateInput, NotesListQuery } from "./notes.schema";
 
 const include = {
@@ -86,4 +87,13 @@ export async function create(input: NoteCreateInput) {
 
     return note;
   });
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.$transaction(async (tx) => {
+    await deleteLedgerByReference(tx, "CREDIT_DEBIT_NOTE", id);
+    await tx.creditDebitNote.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

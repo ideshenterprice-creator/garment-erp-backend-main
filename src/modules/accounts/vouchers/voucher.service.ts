@@ -54,3 +54,9 @@ export async function create(input: VoucherCreateInput, userId: string) {
     include,
   });
 }
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.voucher.delete({ where: { id } });
+  return { id, message: "Deleted permanently" };
+}

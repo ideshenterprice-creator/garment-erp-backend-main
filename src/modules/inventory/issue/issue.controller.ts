@@ -30,3 +30,7 @@ export const markReturned = asyncHandler(async (req: Request, res: Response) => 
     "Issue return recorded"
   );
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Issue deleted");
+});

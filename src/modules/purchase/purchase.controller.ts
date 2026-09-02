@@ -53,3 +53,7 @@ export const registerExport = asyncHandler(async (req: Request, res: Response) =
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.status(200).send(csv);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Purchase bill deleted");
+});

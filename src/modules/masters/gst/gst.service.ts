@@ -38,3 +38,9 @@ export async function update(id: string, input: GstUpdateInput) {
   }
   return prisma.gSTRate.update({ where: { id }, data: input });
 }
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.gSTRate.delete({ where: { id } });
+  return { id, message: "GST rate deleted permanently" };
+}

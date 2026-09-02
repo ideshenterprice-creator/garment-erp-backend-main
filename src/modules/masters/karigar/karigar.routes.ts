@@ -179,4 +179,31 @@ router.put(
   controller.update
 );
 
+/**
+ * @openapi
+ * /api/masters/karigars/{id}:
+ *   delete:
+ *     tags: [Masters - Karigar]
+ *     summary: Permanently delete a karigar profile and linked party
+ *     description: Admin only. Fails if the karigar is linked to production or payments.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Karigar deleted
+ *       409:
+ *         description: Karigar linked to existing transactions
+ */
+router.delete(
+  "/karigars/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
+
 export default router;

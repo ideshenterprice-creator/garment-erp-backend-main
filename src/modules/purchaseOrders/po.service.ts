@@ -441,3 +441,53 @@ export async function getFabricLots(id: string) {
     totalFabricReceived,
   };
 }
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+  if (!po) throw new AppError("Purchase order not found", 404, "NOT_FOUND");
+
+  const [
+    bills,
+    issues,
+    wastage,
+    bundles,
+    boxes,
+    containers,
+    salesBills,
+    payments,
+  ] = await Promise.all([
+    prisma.purchaseBill.count({ where: { poId: id } }),
+    prisma.issueRecord.count({ where: { poId: id } }),
+    prisma.cuttingWastage.count({ where: { poId: id } }),
+    prisma.bundle.count({ where: { poId: id } }),
+    prisma.boxPacking.count({ where: { poId: id } }),
+    prisma.container.count({ where: { poId: id } }),
+    prisma.salesBill.count({ where: { poId: id } }),
+    prisma.karigarPayment.count({ where: { poId: id } }),
+  ]);
+
+  const blockers: string[] = [];
+  if (bills > 0) blockers.push(`${bills} purchase bill(s)`);
+  if (issues > 0) blockers.push(`${issues} issue record(s)`);
+  if (wastage > 0) blockers.push(`${wastage} wastage record(s)`);
+  if (bundles > 0) blockers.push(`${bundles} bundle(s)`);
+  if (boxes > 0) blockers.push(`${boxes} box(es)`);
+  if (containers > 0) blockers.push(`${containers} container(s)`);
+  if (salesBills > 0) blockers.push(`${salesBills} sales bill(s)`);
+  if (payments > 0) blockers.push(`${payments} karigar payment(s)`);
+
+  if (blockers.length > 0) {
+    throw new AppError(
+      `Cannot delete purchase order linked to ${blockers.join(", ")}. Remove those records first.`,
+      409,
+      "PO_IN_USE"
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.pOItem.deleteMany({ where: { poId: id } });
+    await tx.purchaseOrder.delete({ where: { id } });
+  });
+
+  return { id, message: "Deleted permanently" };
+}

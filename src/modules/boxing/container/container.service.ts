@@ -143,3 +143,27 @@ export async function markDispatched(id: string, input: DispatchInput) {
   await updatePOStatus(container.poId, prisma);
   return updated;
 }
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  const container = await prisma.container.findUnique({ where: { id } });
+  if (!container) throw new AppError("Container not found", 404, "NOT_FOUND");
+
+  const salesBills = await prisma.salesBill.count({ where: { containerId: id } });
+  if (salesBills > 0) {
+    throw new AppError(
+      `Cannot delete container linked to ${salesBills} sales bill(s). Remove those first.`,
+      409,
+      "CONTAINER_IN_USE"
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.boxPacking.updateMany({
+      where: { containerId: id },
+      data: { containerId: null, status: "PACKED" },
+    });
+    await tx.container.delete({ where: { id } });
+  });
+
+  return { id, message: "Deleted permanently" };
+}

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
+import * as partyService from "@/modules/masters/party/party.service";
 import {
   KarigarCreateInput,
   KarigarListQuery,
@@ -178,6 +179,12 @@ export async function updateStatus(id: string, input: KarigarStatusInput) {
     include: profileInclude,
   });
   return mapProfile(profile);
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  const profile = await getById(id);
+  await partyService.remove(profile.partyId);
+  return { id, message: "Karigar deleted permanently" };
 }
 
 export async function listPayments(id: string, query: KarigarPaymentsQuery) {

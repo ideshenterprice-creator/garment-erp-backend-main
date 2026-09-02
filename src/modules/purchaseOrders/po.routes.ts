@@ -198,5 +198,6 @@ router.put(
   validate(poUpdateSchema),
   controller.update
 );
+router.delete("/:id", requireAdmin, validate(idParamsSchema, "params"), controller.remove);
 
 export default router;

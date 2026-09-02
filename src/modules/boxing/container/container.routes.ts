@@ -130,5 +130,6 @@ router.patch(
  *         description: Container
  */
 router.get("/:id", validate(idParamsSchema, "params"), controller.getById);
+router.delete("/:id", requireAdmin, validate(idParamsSchema, "params"), controller.remove);
 
 export default router;

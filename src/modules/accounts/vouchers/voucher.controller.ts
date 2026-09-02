@@ -14,3 +14,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError("Authentication required", 401, "UNAUTHORIZED");
   successResponse(res, await service.create(req.body as VoucherCreateInput, req.user.userId), "Voucher created", 201);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Voucher deleted");
+});

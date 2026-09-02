@@ -10,6 +10,7 @@ import {
   throwStockErrors,
 } from "../finishedGoods";
 import { BoxCreateInput, BoxListQuery } from "./box.schema";
+import { reverseStockByReference } from "@/utils/stockReverse";
 
 const include = {
   po: {
@@ -149,4 +150,20 @@ export async function create(input: BoxCreateInput, userId: string) {
 
     return box;
   });
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  const box = await getById(id);
+  if (box.containerId || box.status === "LOADED") {
+    throw new AppError(
+      "This box is loaded in a container. Remove it from the container first.",
+      409,
+      "BOX_IN_USE"
+    );
+  }
+  await prisma.$transaction(async (tx) => {
+    await reverseStockByReference(tx, "BOX_PACKING", id);
+    await tx.boxPacking.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

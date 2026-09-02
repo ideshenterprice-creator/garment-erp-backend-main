@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { WastageCreateInput, WastageListQuery } from "./wastage.schema";
+import { reverseStockByReference } from "@/utils/stockReverse";
 
 const wastageInclude = {
   po: { select: { id: true, poNumber: true, status: true } },
@@ -212,4 +213,13 @@ export async function markSold(id: string, userId: string) {
 
     return updated;
   });
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.$transaction(async (tx) => {
+    await reverseStockByReference(tx, "CUTTING_WASTAGE", id);
+    await tx.cuttingWastage.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

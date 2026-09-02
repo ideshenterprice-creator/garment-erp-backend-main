@@ -3,7 +3,7 @@ import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { generateEntryNumber } from "@/utils/generateId";
 import { updatePOStatus } from "@/modules/purchaseOrders/po.service";
-import { createPendingPayment, findAssignedOperation, requireKarigar } from "../shared";
+import { createPendingPayment, findAssignedOperation, removeProductionEntry, requireKarigar } from "../shared";
 import { ColoringCreateInput, ColoringListQuery } from "./coloring.schema";
 
 const include = {
@@ -125,5 +125,33 @@ export async function create(input: ColoringCreateInput) {
 
     await updatePOStatus(input.poId, tx);
     return { entry, payment, paymentAmount: calc.amountDue };
+  });
+}
+
+export async function remove(id: string) {
+  const entry = await prisma.coloringEntry.findUnique({
+    where: { id },
+    select: { id: true, bundleId: true, poId: true },
+  });
+  const bundleId = entry?.bundleId;
+  const [stitching, finishing] = bundleId
+    ? await Promise.all([
+        prisma.stitchingEntry.count({ where: { bundleId } }),
+        prisma.finishingEntry.count({ where: { bundleId } }),
+      ])
+    : [0, 0];
+
+  const laterBlockers: string[] = [];
+  if (stitching > 0) laterBlockers.push(`${stitching} stitching entry(ies)`);
+  if (finishing > 0) laterBlockers.push(`${finishing} finishing entry(ies)`);
+
+  return removeProductionEntry({
+    id,
+    type: "COLORING",
+    notFoundMessage: "Coloring entry not found",
+    find: async () => entry,
+    laterBlockers,
+    revertStage: "COLORING",
+    deleteEntry: (tx, entryId) => tx.coloringEntry.delete({ where: { id: entryId } }),
   });
 }

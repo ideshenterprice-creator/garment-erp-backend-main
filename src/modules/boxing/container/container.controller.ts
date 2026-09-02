@@ -22,3 +22,7 @@ export const markReady = asyncHandler(async (req: Request, res: Response) => {
 export const markDispatched = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.markDispatched(req.params.id, req.body as DispatchInput), "Container dispatched");
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Container deleted");
+});

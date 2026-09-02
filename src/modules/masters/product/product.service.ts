@@ -162,3 +162,40 @@ export async function updateStatus(id: string, input: ProductStatusInput) {
     include: productInclude,
   });
 }
+
+async function assertProductCanBeDeleted(id: string): Promise<void> {
+  const [bills, transactions, issues, wastage, stock] = await Promise.all([
+    prisma.purchaseBill.count({ where: { productId: id } }),
+    prisma.stockTransaction.count({ where: { productId: id } }),
+    prisma.issueRecord.count({ where: { productId: id } }),
+    prisma.cuttingWastage.count({ where: { fabricTypeId: id } }),
+    prisma.stock.findUnique({ where: { productId: id }, select: { quantity: true } }),
+  ]);
+
+  const blockers: string[] = [];
+  if (bills > 0) blockers.push(`${bills} purchase bill(s)`);
+  if (transactions > 0) blockers.push(`${transactions} stock transaction(s)`);
+  if (issues > 0) blockers.push(`${issues} issue record(s)`);
+  if (wastage > 0) blockers.push(`${wastage} wastage record(s)`);
+  if (stock && Number(stock.quantity) !== 0) blockers.push("non-zero stock");
+
+  if (blockers.length > 0) {
+    throw new AppError(
+      `Cannot delete product linked to ${blockers.join(", ")}. Remove or reassign those records first.`,
+      409,
+      "PRODUCT_IN_USE"
+    );
+  }
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await assertProductCanBeDeleted(id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.stock.deleteMany({ where: { productId: id } });
+    await tx.product.delete({ where: { id } });
+  });
+
+  return { id, message: "Product deleted permanently" };
+}

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { createLedgerEntry } from "@/utils/ledgerHelper";
+import { deleteLedgerByReference } from "@/utils/stockReverse";
 import { isoWeek } from "@/modules/production/shared";
 import { KarigarConfirmInput, KarigarListQuery } from "./karigarPayment.schema";
 
@@ -100,4 +101,13 @@ export async function confirm(id: string, input: KarigarConfirmInput) {
 
     return updated;
   });
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.$transaction(async (tx) => {
+    await deleteLedgerByReference(tx, "KARIGAR_PAYMENT", id);
+    await tx.karigarPayment.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

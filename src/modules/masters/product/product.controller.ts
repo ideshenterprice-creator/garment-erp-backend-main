@@ -32,3 +32,7 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
     "Product status updated"
   );
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Product deleted");
+});

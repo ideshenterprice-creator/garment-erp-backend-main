@@ -34,6 +34,10 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
   );
 });
 
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Karigar deleted");
+});
+
 export const listPayments = asyncHandler(async (req: Request, res: Response) => {
   successResponse(
     res,

@@ -183,5 +183,11 @@ router.patch(
  *         description: Not found
  */
 router.get("/bills/:id", validate(idParamsSchema, "params"), controller.getById);
+router.delete(
+  "/bills/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
 
 export default router;

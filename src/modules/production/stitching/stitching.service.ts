@@ -3,7 +3,7 @@ import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { generateEntryNumber } from "@/utils/generateId";
 import { updatePOStatus } from "@/modules/purchaseOrders/po.service";
-import { assignedOperationIds, assertOperationAssigned, createPendingPayment, requireKarigar } from "../shared";
+import { assignedOperationIds, assertOperationAssigned, createPendingPayment, removeProductionEntry, requireKarigar } from "../shared";
 import { StitchingCreateInput, StitchingListQuery } from "./stitching.schema";
 
 const include = {
@@ -131,5 +131,25 @@ export async function create(input: StitchingCreateInput) {
 
     await updatePOStatus(input.poId, tx);
     return { entry, payment, paymentAmount: calc.amountDue, allStitchingDone: allDone };
+  });
+}
+
+export async function remove(id: string) {
+  const entry = await prisma.stitchingEntry.findUnique({
+    where: { id },
+    select: { id: true, bundleId: true, poId: true },
+  });
+  const finishing = entry
+    ? await prisma.finishingEntry.count({ where: { bundleId: entry.bundleId } })
+    : 0;
+
+  return removeProductionEntry({
+    id,
+    type: "STITCHING",
+    notFoundMessage: "Stitching entry not found",
+    find: async () => entry,
+    laterBlockers: finishing > 0 ? [`${finishing} finishing entry(ies)`] : [],
+    revertStage: "STITCHING",
+    deleteEntry: (tx, entryId) => tx.stitchingEntry.delete({ where: { id: entryId } }),
   });
 }

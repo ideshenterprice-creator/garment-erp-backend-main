@@ -13,3 +13,7 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
 export const create = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.create(req.body as StitchingCreateInput), "Stitching entry created", 201);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Stitching entry deleted");
+});

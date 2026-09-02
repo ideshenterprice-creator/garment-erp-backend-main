@@ -13,3 +13,7 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
 export const confirm = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.confirm(req.params.id, req.body as KarigarConfirmInput), "Karigar payment confirmed");
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Karigar payment deleted");
+});

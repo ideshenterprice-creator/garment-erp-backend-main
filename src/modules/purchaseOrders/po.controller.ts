@@ -31,3 +31,7 @@ export const productionStatus = asyncHandler(async (req: Request, res: Response)
 export const fabricLots = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.getFabricLots(req.params.id), "Fabric lots loaded");
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Purchase order deleted");
+});

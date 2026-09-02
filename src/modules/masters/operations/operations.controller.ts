@@ -33,3 +33,7 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
     "Operation status updated"
   );
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Operation deleted");
+});

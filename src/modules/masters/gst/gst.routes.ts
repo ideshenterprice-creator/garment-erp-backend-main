@@ -87,4 +87,30 @@ router.put(
   controller.update
 );
 
+/**
+ * @openapi
+ * /api/masters/gst/{id}:
+ *   delete:
+ *     tags: [Masters - GST]
+ *     summary: Permanently delete a GST rate
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: GST rate deleted
+ *       404:
+ *         description: Not found
+ */
+router.delete(
+  "/gst/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
+
 export default router;

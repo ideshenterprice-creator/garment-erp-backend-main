@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "@/middleware/auth";
-import { requireTeamMember } from "@/middleware/roleCheck";
+import { requireAdmin, requireTeamMember } from "@/middleware/roleCheck";
 import { validate } from "@/middleware/validate";
 import * as controller from "./issue.controller";
 import { idParamsSchema, issueCreateSchema, issueListQuerySchema, issueReturnSchema } from "./issue.schema";
@@ -119,5 +119,6 @@ router.patch(
  *         description: Not found
  */
 router.get("/:id", validate(idParamsSchema, "params"), controller.getById);
+router.delete("/:id", requireAdmin, validate(idParamsSchema, "params"), controller.remove);
 
 export default router;

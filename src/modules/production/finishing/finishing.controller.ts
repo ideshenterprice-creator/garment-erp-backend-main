@@ -14,3 +14,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError("Authentication required", 401, "UNAUTHORIZED");
   successResponse(res, await service.create(req.body as FinishingCreateInput, req.user.userId), "Finishing entry created", 201);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Finishing entry deleted");
+});

@@ -5,6 +5,7 @@ import { generateInvoiceNumber, generateVoucherNumber } from "@/utils/generateId
 import { createLedgerEntry } from "@/utils/ledgerHelper";
 import { validateStock } from "@/utils/stockValidator";
 import { toCsv } from "@/utils/csv";
+import { reverseStockByReference, deleteLedgerByReference } from "@/utils/stockReverse";
 import {
   findFinishedGoodForDesignSize,
   parseSizeLabel,
@@ -577,4 +578,19 @@ export async function invoicePdf(id: string, userId?: string): Promise<{ filenam
   }
 
   return { filename: `${bill.invoiceNumber}.pdf`, buffer };
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.$transaction(async (tx) => {
+    await reverseStockByReference(tx, ["SALES_BILL", "SALES_PAYMENT", "SALES_BILL_RETURN"], id);
+    await deleteLedgerByReference(tx, ["SALES_BILL", "SALES_PAYMENT", "SALES_BILL_RETURN"], id);
+    const notes = await tx.creditDebitNote.findMany({ where: { salesBillId: id }, select: { id: true } });
+    for (const note of notes) {
+      await deleteLedgerByReference(tx, "CREDIT_DEBIT_NOTE", note.id);
+    }
+    await tx.creditDebitNote.deleteMany({ where: { salesBillId: id } });
+    await tx.salesBill.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

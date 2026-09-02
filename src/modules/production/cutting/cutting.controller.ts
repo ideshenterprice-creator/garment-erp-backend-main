@@ -17,3 +17,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
   const result = await service.create(req.body as CuttingCreateInput, req.user.userId);
   successResponse(res, result, "Cutting entry created", 201);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Cutting entry deleted");
+});

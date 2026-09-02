@@ -3,7 +3,7 @@ import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
 import { generateEntryNumber } from "@/utils/generateId";
 import { updatePOStatus } from "@/modules/purchaseOrders/po.service";
-import { createPendingPayment, findAssignedOperation, requireKarigar } from "../shared";
+import { createPendingPayment, findAssignedOperation, removeProductionEntry, requireKarigar } from "../shared";
 import { PrintingCreateInput, PrintingListQuery } from "./printing.schema";
 
 const include = {
@@ -126,5 +126,35 @@ export async function create(input: PrintingCreateInput) {
 
     await updatePOStatus(input.poId, tx);
     return { entry, payment, paymentAmount: calc.amountDue };
+  });
+}
+
+export async function remove(id: string) {
+  const entry = await prisma.printingEntry.findUnique({
+    where: { id },
+    select: { id: true, bundleId: true, poId: true },
+  });
+  const bundleId = entry?.bundleId;
+  const [coloring, stitching, finishing] = bundleId
+    ? await Promise.all([
+        prisma.coloringEntry.count({ where: { bundleId } }),
+        prisma.stitchingEntry.count({ where: { bundleId } }),
+        prisma.finishingEntry.count({ where: { bundleId } }),
+      ])
+    : [0, 0, 0];
+
+  const laterBlockers: string[] = [];
+  if (coloring > 0) laterBlockers.push(`${coloring} coloring entry(ies)`);
+  if (stitching > 0) laterBlockers.push(`${stitching} stitching entry(ies)`);
+  if (finishing > 0) laterBlockers.push(`${finishing} finishing entry(ies)`);
+
+  return removeProductionEntry({
+    id,
+    type: "PRINTING",
+    notFoundMessage: "Printing entry not found",
+    find: async () => entry,
+    laterBlockers,
+    revertStage: "PRINTING",
+    deleteEntry: (tx, entryId) => tx.printingEntry.delete({ where: { id: entryId } }),
   });
 }

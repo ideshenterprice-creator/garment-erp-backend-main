@@ -146,4 +146,31 @@ router.put(
   controller.update
 );
 
+/**
+ * @openapi
+ * /api/masters/products/{id}:
+ *   delete:
+ *     tags: [Masters - Product]
+ *     summary: Permanently delete a product
+ *     description: Admin only. Fails if the product is linked to stock movement or transactions.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Product deleted
+ *       409:
+ *         description: Product linked to existing transactions
+ */
+router.delete(
+  "/products/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
+
 export default router;

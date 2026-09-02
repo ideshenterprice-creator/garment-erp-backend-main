@@ -1,8 +1,16 @@
-import { Prisma, PrismaClient, ProductionEntryType, ProductionStage } from "@prisma/client";
+import {
+  BundleStage,
+  Prisma,
+  PrismaClient,
+  ProductionEntryType,
+  ProductionStage,
+} from "@prisma/client";
 import prisma from "@/config/database";
 import { AppError } from "@/middleware/errorHandler";
+import { updatePOStatus } from "@/modules/purchaseOrders/po.service";
 import { generateKPNumber } from "@/utils/generateId";
 import { calculateKarigarPayment } from "@/utils/paymentCalculator";
+import { reverseStockByReference } from "@/utils/stockReverse";
 
 export type TxClient = PrismaClient | Prisma.TransactionClient;
 
@@ -181,4 +189,63 @@ export async function addProductionStock(params: {
       createdById: params.userId,
     },
   });
+}
+
+export async function removeProductionEntry(params: {
+  id: string;
+  type: ProductionEntryType;
+  notFoundMessage: string;
+  find: () => Promise<{ id: string; bundleId: string; poId: string } | null>;
+  laterBlockers: string[];
+  revertStage: BundleStage;
+  stockReferenceType?: string;
+  deleteEntry: (tx: TxClient, id: string) => Promise<unknown>;
+}): Promise<{ id: string; message: string }> {
+  const entry = await params.find();
+  if (!entry) {
+    throw new AppError(params.notFoundMessage, 404, "NOT_FOUND");
+  }
+
+  if (params.laterBlockers.length > 0) {
+    throw new AppError(
+      `Cannot delete: later production records exist (${params.laterBlockers.join(", ")}). Delete those first.`,
+      409,
+      "ENTRY_IN_USE"
+    );
+  }
+
+  const paid = await prisma.karigarPayment.count({
+    where: {
+      productionEntryType: params.type,
+      productionEntryId: entry.id,
+      status: "PAID",
+    },
+  });
+  if (paid > 0) {
+    throw new AppError(
+      "Cannot delete: karigar payment already paid for this entry.",
+      409,
+      "PAYMENT_PAID"
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (params.stockReferenceType) {
+      await reverseStockByReference(tx, params.stockReferenceType, entry.id);
+    }
+    await tx.karigarPayment.deleteMany({
+      where: {
+        productionEntryType: params.type,
+        productionEntryId: entry.id,
+      },
+    });
+    await params.deleteEntry(tx, entry.id);
+    await tx.bundle.update({
+      where: { id: entry.bundleId },
+      data: { currentStage: params.revertStage, status: "IN_PROGRESS" },
+    });
+    await updatePOStatus(entry.poId, tx);
+  });
+
+  return { id: entry.id, message: "Deleted permanently" };
 }

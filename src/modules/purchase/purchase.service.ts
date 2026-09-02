@@ -5,6 +5,7 @@ import { generatePBNumber } from "@/utils/generateId";
 import { createLedgerEntry } from "@/utils/ledgerHelper";
 import { validateStock } from "@/utils/stockValidator";
 import { toCsv } from "@/utils/csv";
+import { reverseStockByReference, deleteLedgerByReference } from "@/utils/stockReverse";
 import {
   notifyActiveUsers,
   NotificationType,
@@ -472,4 +473,15 @@ export async function registerCsv(query: PurchaseRegisterQuery): Promise<{ filen
     ])
   );
   return { filename: "purchase-register.csv", csv };
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await prisma.$transaction(async (tx) => {
+    await reverseStockByReference(tx, ["PURCHASE_BILL", "PurchaseBill", "PURCHASE_RETURN"], id);
+    await deleteLedgerByReference(tx, ["PURCHASE_BILL", "PURCHASE_RETURN"], id);
+    await tx.supplierPayment.deleteMany({ where: { purchaseBillId: id } });
+    await tx.purchaseBill.delete({ where: { id } });
+  });
+  return { id, message: "Deleted permanently" };
 }

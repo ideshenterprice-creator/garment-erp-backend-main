@@ -129,3 +129,36 @@ export async function updateStatus(id: string, input: OperationStatusInput) {
   });
   return withRateLock(updated);
 }
+
+async function assertOperationCanBeDeleted(id: string): Promise<void> {
+  const [stitching, finishing, payments] = await Promise.all([
+    prisma.stitchingEntry.count({ where: { operationId: id } }),
+    prisma.finishingEntry.count({ where: { operationId: id } }),
+    prisma.karigarPayment.count({ where: { operationId: id } }),
+  ]);
+
+  const blockers: string[] = [];
+  if (stitching > 0) blockers.push(`${stitching} stitching entry(ies)`);
+  if (finishing > 0) blockers.push(`${finishing} finishing entry(ies)`);
+  if (payments > 0) blockers.push(`${payments} karigar payment(s)`);
+
+  if (blockers.length > 0) {
+    throw new AppError(
+      `Cannot delete operation linked to ${blockers.join(", ")}. Remove or reassign those records first.`,
+      409,
+      "OPERATION_IN_USE"
+    );
+  }
+}
+
+export async function remove(id: string): Promise<{ id: string; message: string }> {
+  await getById(id);
+  await assertOperationCanBeDeleted(id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.karigarOperation.deleteMany({ where: { operationId: id } });
+    await tx.operation.delete({ where: { id } });
+  });
+
+  return { id, message: "Operation deleted permanently" };
+}

@@ -51,3 +51,7 @@ export const invoicePdf = asyncHandler(async (req: Request, res: Response) => {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.status(200).send(buffer);
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "Sales bill deleted");
+});

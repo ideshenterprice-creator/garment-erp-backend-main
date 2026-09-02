@@ -9,6 +9,7 @@ import {
   assertOperationAssigned,
   createPendingPayment,
   findFinishedGoodProduct,
+  removeProductionEntry,
   requireKarigar,
 } from "../shared";
 import { FinishingCreateInput, FinishingListQuery } from "./finishing.schema";
@@ -174,4 +175,22 @@ export async function create(input: FinishingCreateInput, userId: string) {
   }
 
   return result;
+}
+
+export async function remove(id: string) {
+  const entry = await prisma.finishingEntry.findUnique({
+    where: { id },
+    select: { id: true, bundleId: true, poId: true },
+  });
+
+  return removeProductionEntry({
+    id,
+    type: "FINISHING",
+    notFoundMessage: "Finishing entry not found",
+    find: async () => entry,
+    laterBlockers: [],
+    revertStage: "FINISHING",
+    stockReferenceType: "FINISHING_ENTRY",
+    deleteEntry: (tx, entryId) => tx.finishingEntry.delete({ where: { id: entryId } }),
+  });
 }

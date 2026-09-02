@@ -8,6 +8,7 @@ import {
   createPendingPayment,
   findAssignedOperation,
   findFinishedGoodProduct,
+  removeProductionEntry,
   requireKarigar,
 } from "../shared";
 import { CuttingCreateInput, CuttingListQuery } from "./cutting.schema";
@@ -156,5 +157,38 @@ export async function create(input: CuttingCreateInput, userId: string) {
     await updatePOStatus(input.poId, tx);
 
     return { entry, payment, paymentAmount: calc.amountDue };
+  });
+}
+
+export async function remove(id: string) {
+  const entry = await prisma.cuttingEntry.findUnique({
+    where: { id },
+    select: { id: true, bundleId: true, poId: true },
+  });
+  const bundleId = entry?.bundleId;
+  const [printing, coloring, stitching, finishing] = bundleId
+    ? await Promise.all([
+        prisma.printingEntry.count({ where: { bundleId } }),
+        prisma.coloringEntry.count({ where: { bundleId } }),
+        prisma.stitchingEntry.count({ where: { bundleId } }),
+        prisma.finishingEntry.count({ where: { bundleId } }),
+      ])
+    : [0, 0, 0, 0];
+
+  const laterBlockers: string[] = [];
+  if (printing > 0) laterBlockers.push(`${printing} printing entry(ies)`);
+  if (coloring > 0) laterBlockers.push(`${coloring} coloring entry(ies)`);
+  if (stitching > 0) laterBlockers.push(`${stitching} stitching entry(ies)`);
+  if (finishing > 0) laterBlockers.push(`${finishing} finishing entry(ies)`);
+
+  return removeProductionEntry({
+    id,
+    type: "CUTTING",
+    notFoundMessage: "Cutting entry not found",
+    find: async () => entry,
+    laterBlockers,
+    revertStage: "CUTTING",
+    stockReferenceType: "CUTTING_ENTRY",
+    deleteEntry: (tx, entryId) => tx.cuttingEntry.delete({ where: { id: entryId } }),
   });
 }

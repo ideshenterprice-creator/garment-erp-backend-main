@@ -19,3 +19,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 export const update = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.update(req.params.id, req.body as GstUpdateInput), "GST rate updated");
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.remove(req.params.id), "GST rate deleted");
+});

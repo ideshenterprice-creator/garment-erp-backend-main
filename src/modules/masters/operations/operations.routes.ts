@@ -138,4 +138,31 @@ router.put(
   controller.update
 );
 
+/**
+ * @openapi
+ * /api/masters/operations/{id}:
+ *   delete:
+ *     tags: [Masters - Operations]
+ *     summary: Permanently delete an operation
+ *     description: Admin only. Fails if the operation is used in production or payments.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Operation deleted
+ *       409:
+ *         description: Operation linked to existing transactions
+ */
+router.delete(
+  "/operations/:id",
+  requireAdmin,
+  validate(idParamsSchema, "params"),
+  controller.remove
+);
+
 export default router;
