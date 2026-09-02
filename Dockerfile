@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
@@ -11,7 +11,7 @@ RUN DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public" \
     DIRECT_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public" \
     npx prisma generate && npm run build
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./

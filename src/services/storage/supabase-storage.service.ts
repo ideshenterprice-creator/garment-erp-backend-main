@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import path from "path";
+import WebSocket from "ws";
 import { AppError } from "@/middleware/errorHandler";
 import logger from "@/config/logger";
 
@@ -35,6 +36,8 @@ function getClient(): SupabaseClient {
   if (!client) {
     client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Node < 22 has no global WebSocket; supabase-js realtime requires one at construct time.
+      realtime: { transport: WebSocket as never },
     });
   }
   return client;
