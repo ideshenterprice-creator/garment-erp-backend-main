@@ -8,6 +8,7 @@ import { isProduction } from "@/config/env";
 import { ensurePrivateBucket } from "@/services/storage/supabase-storage.service";
 
 const port = Number(process.env.PORT ?? 5000);
+const host = process.env.HOST ?? "0.0.0.0";
 
 function assertDatabaseConfig(): void {
   if (!process.env.DATABASE_URL) {
@@ -27,8 +28,8 @@ async function start(): Promise<void> {
   logger.info("Prisma connected");
   await ensurePrivateBucket();
 
-  const server = app.listen(port, () => {
-    logger.info("FabricFlow ERP API listening", { port });
+  const server = app.listen(port, host, () => {
+    logger.info("FabricFlow ERP API listening", { host, port });
   });
 
   const shutdown = async (signal: string): Promise<void> => {

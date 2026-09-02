@@ -24,5 +24,6 @@ COPY --from=build /app/dist ./dist
 COPY scripts/docker-start.sh ./scripts/docker-start.sh
 RUN chmod +x ./scripts/docker-start.sh
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 EXPOSE 5000
 CMD ["./scripts/docker-start.sh"]

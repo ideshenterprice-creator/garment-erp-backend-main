@@ -24,14 +24,33 @@ export function refreshCookieMaxAgeMs(): number {
   return parseDurationMs(process.env.JWT_REFRESH_EXPIRES_IN, 7 * 24 * 60 * 60 * 1000);
 }
 
+const PRODUCTION_FRONTEND_ORIGINS = [
+  "https://garment-erp-frontend-ivory.vercel.app",
+  "https://garment-erp-frontend-main-ebon.vercel.app",
+];
+const LOCAL_FRONTEND_ORIGIN = "http://localhost:3000";
+
+function railwayPublicOrigin(): string | undefined {
+  const raw = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
+  if (!raw) return undefined;
+  const host = raw.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return host ? `https://${host}` : undefined;
+}
+
+export function isFabricFlowVercelOrigin(origin: string): boolean {
+  return /^https:\/\/garment-erp-frontend[a-z0-9.-]*\.vercel\.app$/i.test(origin);
+}
+
 export function frontendUrl(): string {
-  const value = process.env.FRONTEND_URL || process.env.APP_URL || "http://localhost:3000";
+  const value = process.env.FRONTEND_URL || process.env.APP_URL || LOCAL_FRONTEND_ORIGIN;
   return value.replace(/\/$/, "");
 }
 
 export function backendUrl(port = process.env.PORT ?? "5000"): string {
   const value = process.env.BACKEND_URL;
   if (value) return value.replace(/\/$/, "");
+  const railway = railwayPublicOrigin();
+  if (railway) return railway;
   return `http://localhost:${port}`;
 }
 
@@ -45,16 +64,18 @@ export function corsAllowlist(): string[] {
   const unique = [
     ...new Set([
       ...raw,
-      "https://garment-erp-frontend-ivory.vercel.app",
+      ...PRODUCTION_FRONTEND_ORIGINS,
+      LOCAL_FRONTEND_ORIGIN,
     ]),
   ];
-  return unique.length > 0 ? unique : ["http://localhost:3000"];
+  return unique.length > 0 ? unique : [LOCAL_FRONTEND_ORIGIN];
 }
 
 export function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (!origin) return true;
   const normalized = origin.replace(/\/$/, "");
   if (corsAllowlist().includes(normalized)) return true;
+  if (isFabricFlowVercelOrigin(normalized)) return true;
   if (isProduction()) return false;
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized);
 }

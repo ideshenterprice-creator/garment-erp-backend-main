@@ -1,6 +1,12 @@
 import request from "supertest";
 import app from "../src/app";
-import { parseDurationMs, corsAllowlist, isAllowedCorsOrigin } from "../src/config/env";
+import {
+  parseDurationMs,
+  corsAllowlist,
+  isAllowedCorsOrigin,
+  isFabricFlowVercelOrigin,
+  backendUrl,
+} from "../src/config/env";
 
 describe("Auth", () => {
   it("health check returns ok", async () => {
@@ -46,6 +52,48 @@ describe("Auth", () => {
 
   it("allows the production Vercel frontend origin", () => {
     expect(corsAllowlist()).toContain("https://garment-erp-frontend-ivory.vercel.app");
+    expect(corsAllowlist()).toContain("https://garment-erp-frontend-main-ebon.vercel.app");
+  });
+
+  it("allows local frontend origin so Railway can be used from localhost", () => {
+    expect(corsAllowlist()).toContain("http://localhost:3000");
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    expect(isAllowedCorsOrigin("http://localhost:3000")).toBe(true);
+    process.env.NODE_ENV = previous;
+  });
+
+  it("allows FabricFlow Vercel preview origins", () => {
+    expect(
+      isFabricFlowVercelOrigin("https://garment-erp-frontend-main-hwizpqxz0-idesh.vercel.app")
+    ).toBe(true);
+    expect(
+      isFabricFlowVercelOrigin("https://garment-erp-frontend-main-ebon.vercel.app")
+    ).toBe(true);
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    expect(
+      isAllowedCorsOrigin("https://garment-erp-frontend-main-ebon.vercel.app")
+    ).toBe(true);
+    process.env.NODE_ENV = previous;
+  });
+
+  it("uses Railway public domain when BACKEND_URL is unset", () => {
+    const previousBackend = process.env.BACKEND_URL;
+    const previousRailway = process.env.RAILWAY_PUBLIC_DOMAIN;
+    delete process.env.BACKEND_URL;
+    process.env.RAILWAY_PUBLIC_DOMAIN = "chic-presence.up.railway.app";
+    expect(backendUrl()).toBe("https://chic-presence.up.railway.app");
+    if (previousBackend === undefined) {
+      delete process.env.BACKEND_URL;
+    } else {
+      process.env.BACKEND_URL = previousBackend;
+    }
+    if (previousRailway === undefined) {
+      delete process.env.RAILWAY_PUBLIC_DOMAIN;
+    } else {
+      process.env.RAILWAY_PUBLIC_DOMAIN = previousRailway;
+    }
   });
 
   it("allows localhost on alternate ports in development", () => {

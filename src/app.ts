@@ -55,6 +55,7 @@ app.use(
   helmet({
     contentSecurityPolicy: false,
     referrerPolicy: { policy: "no-referrer" },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 app.use(

@@ -9,30 +9,37 @@ const BCRYPT_ROUNDS = 12;
 
 async function main(): Promise<void> {
   const { email, password, name } = adminCredentials();
+  const aliases = (process.env.ADMIN_EMAIL_ALIASES ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.includes("@"));
+  const emails = [...new Set([email, ...aliases])];
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  await prisma.user.upsert({
-    where: { email },
-    update: {
-      name,
-      password: passwordHash,
-      role: "ADMIN",
-      isActive: true,
-      inviteToken: null,
-      inviteTokenExpiry: null,
-    },
-    create: {
-      name,
-      email,
-      password: passwordHash,
-      role: "ADMIN",
-      isActive: true,
-      inviteToken: null,
-      inviteTokenExpiry: null,
-    },
-  });
+  for (const accountEmail of emails) {
+    await prisma.user.upsert({
+      where: { email: accountEmail },
+      update: {
+        name,
+        password: passwordHash,
+        role: "ADMIN",
+        isActive: true,
+        inviteToken: null,
+        inviteTokenExpiry: null,
+      },
+      create: {
+        name,
+        email: accountEmail,
+        password: passwordHash,
+        role: "ADMIN",
+        isActive: true,
+        inviteToken: null,
+        inviteTokenExpiry: null,
+      },
+    });
+  }
 
-  console.log("Admin account is ready from .env (password not logged).");
+  console.log(`Admin account is ready for ${emails.length} email(s) (password not logged).`);
 }
 
 main()
