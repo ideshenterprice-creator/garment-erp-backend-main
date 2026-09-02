@@ -14,7 +14,7 @@ function assertDatabaseConfig(): void {
     throw new Error("DATABASE_URL is not configured");
   }
   if (!process.env.DIRECT_URL) {
-    throw new Error("DIRECT_URL is not configured");
+    process.env.DIRECT_URL = process.env.DATABASE_URL;
   }
   if (isProduction() && /localhost|127\.0\.0\.1/i.test(process.env.DATABASE_URL)) {
     throw new Error("Production backend must not connect to a localhost database");
