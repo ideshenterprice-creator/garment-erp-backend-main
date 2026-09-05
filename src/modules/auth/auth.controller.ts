@@ -18,6 +18,16 @@ function refreshCookieOptions(): CookieOptions {
   };
 }
 
+function clearRefreshCookie(res: Response): void {
+  const options = refreshCookieOptions();
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: options.secure,
+    sameSite: options.sameSite,
+    path: "/",
+  });
+}
+
 function readRefreshCookie(req: Request): string | undefined {
   const value = req.cookies?.refreshToken;
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -37,19 +47,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  const result = await authService.refresh(readRefreshCookie(req));
-  res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, refreshCookieOptions());
-  successResponse(res, { accessToken: result.accessToken }, "Token refreshed");
+  try {
+    const result = await authService.refresh(readRefreshCookie(req));
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, refreshCookieOptions());
+    successResponse(res, { accessToken: result.accessToken }, "Token refreshed");
+  } catch (error) {
+    clearRefreshCookie(res);
+    throw error;
+  }
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.logout(readRefreshCookie(req));
-  res.clearCookie(REFRESH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: refreshCookieOptions().secure,
-    sameSite: refreshCookieOptions().sameSite,
-    path: "/",
-  });
+  clearRefreshCookie(res);
   successResponse(res, result, result.message);
 });
 

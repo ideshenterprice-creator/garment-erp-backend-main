@@ -44,6 +44,24 @@ describe("Auth", () => {
     expect(res.status).toBe(401);
   });
 
+  it("refresh without a cookie returns 401 and clears the refresh cookie", async () => {
+    const res = await request(app).post("/api/auth/refresh");
+    expect(res.status).toBe(401);
+    expect(res.body.message).toMatch(/refresh token/i);
+    const setCookie = res.headers["set-cookie"];
+    const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+    expect(cookies.join("\n")).toMatch(/refreshToken=/i);
+    expect(cookies.join("\n")).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+
+  it("logout without auth still succeeds and clears the refresh cookie", async () => {
+    const res = await request(app).post("/api/auth/logout");
+    expect(res.status).toBe(200);
+    const setCookie = res.headers["set-cookie"];
+    const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+    expect(cookies.join("\n")).toMatch(/refreshToken=/i);
+  });
+
   it("parses refresh cookie TTL from duration strings", () => {
     expect(parseDurationMs("7d", 0)).toBe(7 * 24 * 60 * 60 * 1000);
     expect(parseDurationMs("15m", 0)).toBe(15 * 60 * 1000);

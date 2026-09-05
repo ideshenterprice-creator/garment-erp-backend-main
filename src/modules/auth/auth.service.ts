@@ -163,20 +163,15 @@ export async function refresh(
     email: user.email,
     role: user.role,
   });
-  const nextRefreshToken = signRefreshToken({ userId: user.id });
 
-  await prisma.$transaction([
-    prisma.refreshToken.deleteMany({ where: { token: refreshToken } }),
-    prisma.refreshToken.create({
-      data: {
-        token: nextRefreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + refreshCookieMaxAgeMs()),
-      },
-    }),
-  ]);
+  // Reuse the same refresh token. Rotating on every refresh races when the
+  // browser, multiple tabs, or React Strict Mode hit /auth/refresh twice.
+  await prisma.refreshToken.update({
+    where: { id: stored.id },
+    data: { expiresAt: new Date(Date.now() + refreshCookieMaxAgeMs()) },
+  });
 
-  return { accessToken, refreshToken: nextRefreshToken };
+  return { accessToken, refreshToken };
 }
 
 export async function logout(refreshToken: string | undefined): Promise<{ message: string }> {

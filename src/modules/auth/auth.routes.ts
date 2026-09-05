@@ -1,6 +1,6 @@
 import rateLimit from "express-rate-limit";
 import { Router } from "express";
-import { authenticate, authenticateAllowInactive } from "@/middleware/auth";
+import { authenticate } from "@/middleware/auth";
 import { validate } from "@/middleware/validate";
 import * as controller from "./auth.controller";
 import { acceptInviteSchema, loginSchema } from "./auth.schema";
@@ -82,16 +82,13 @@ router.post("/refresh", controller.refresh);
  *   post:
  *     tags: [Auth]
  *     summary: Logout and revoke the refresh token
- *     description: Requires a valid access token. Deletes the refresh token from the database and clears the cookie.
- *     security:
- *       - bearerAuth: []
+ *     description: Cookie-based. Revokes the refresh token if present and always clears the cookie. Does not require an access token so expired sessions can still sign out.
+ *     security: []
  *     responses:
  *       200:
  *         description: Logged out successfully
- *       401:
- *         description: Missing or invalid access token
  */
-router.post("/logout", authenticateAllowInactive, controller.logout);
+router.post("/logout", controller.logout);
 
 /**
  * @openapi
