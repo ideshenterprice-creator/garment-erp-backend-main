@@ -20,7 +20,7 @@ const stitchingDepartmentTypes = [
 ] as const;
 
 const operationDepartmentFields = {
-  lotNo: z.string().nullish(),
+  lotNo: z.string().trim().max(50).nullish(),
   department: z.string().nullish(),
   departmentType: operationDepartmentEnum.nullish(),
 };

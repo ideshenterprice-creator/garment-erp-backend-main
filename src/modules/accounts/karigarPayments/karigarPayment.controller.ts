@@ -11,7 +11,11 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.getById(req.params.id), "Karigar payment loaded");
 });
 export const confirm = asyncHandler(async (req: Request, res: Response) => {
-  successResponse(res, await service.confirm(req.params.id, req.body as KarigarConfirmInput), "Karigar payment confirmed");
+  successResponse(
+    res,
+    await service.confirm(req.params.id, req.body as KarigarConfirmInput, req.user?.userId),
+    "Karigar payment confirmed"
+  );
 });
 
 export const remove = asyncHandler(async (req: Request, res: Response) => {

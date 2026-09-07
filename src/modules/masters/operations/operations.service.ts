@@ -30,6 +30,33 @@ function withRateLock<T extends { createdAt: Date }>(operation: T) {
   };
 }
 
+function normalizeLotNo(lotNo: string | null | undefined): string | null {
+  const trimmed = lotNo?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isLotNoUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+  const target = error.meta?.target;
+  if (typeof target === "string") return target.toLowerCase().includes("lotno");
+  return Array.isArray(target) && target.some((field) => String(field).toLowerCase() === "lotno");
+}
+
+async function assertLotNoUnique(lotNo: string | null, excludeId?: string): Promise<void> {
+  if (!lotNo) return;
+  const existing = await prisma.operation.findFirst({
+    where: {
+      lotNo: { equals: lotNo, mode: "insensitive" },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+  });
+  if (existing) {
+    throw new AppError("Lot No already exists", 409, "DUPLICATE_LOT_NO");
+  }
+}
+
 async function nextOperationCode(): Promise<string> {
   const count = await prisma.operation.count({
     where: { operationCode: { startsWith: "OP-" } },
@@ -81,26 +108,41 @@ export async function getById(id: string) {
 }
 
 export async function create(input: OperationCreateInput) {
+  const lotNo = normalizeLotNo(input.lotNo);
+  await assertLotNoUnique(lotNo);
   const operationCode = await nextOperationCode();
-  const operation = await prisma.operation.create({
-    data: {
-      operationCode,
-      name: input.name,
-      stage: input.stage,
-      ratePerPiece: input.ratePerPiece,
-      unit: toUnitOfMeasure(input.unit),
-      lotNo: input.lotNo,
-      department: input.department,
-      departmentType: input.departmentType,
-    },
-  });
-  return withRateLock(operation);
+  try {
+    const operation = await prisma.operation.create({
+      data: {
+        operationCode,
+        name: input.name,
+        stage: input.stage,
+        ratePerPiece: input.ratePerPiece,
+        unit: toUnitOfMeasure(input.unit),
+        lotNo,
+        department: input.department,
+        departmentType: input.departmentType,
+      },
+    });
+    return withRateLock(operation);
+  } catch (error) {
+    if (isLotNoUniqueViolation(error)) {
+      throw new AppError("Lot No already exists", 409, "DUPLICATE_LOT_NO");
+    }
+    throw error;
+  }
 }
 
 export async function update(id: string, input: OperationUpdateInput) {
   const existing = await prisma.operation.findUnique({ where: { id } });
   if (!existing) {
     throw new AppError("Operation not found", 404, "NOT_FOUND");
+  }
+
+  const lotNo =
+    input.lotNo !== undefined ? normalizeLotNo(input.lotNo) : existing.lotNo;
+  if (input.lotNo !== undefined) {
+    await assertLotNoUnique(lotNo, id);
   }
 
   const rateChanged =
@@ -122,10 +164,15 @@ export async function update(id: string, input: OperationUpdateInput) {
       stage: input.stage,
       ratePerPiece: input.ratePerPiece,
       unit: input.unit !== undefined ? toUnitOfMeasure(input.unit) : undefined,
-      lotNo: input.lotNo,
+      lotNo: input.lotNo !== undefined ? lotNo : undefined,
       department: input.department,
       departmentType: input.departmentType,
     },
+  }).catch((error) => {
+    if (isLotNoUniqueViolation(error)) {
+      throw new AppError("Lot No already exists", 409, "DUPLICATE_LOT_NO");
+    }
+    throw error;
   });
 
   return {

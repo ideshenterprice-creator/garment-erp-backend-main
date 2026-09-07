@@ -69,13 +69,15 @@ router.use(authenticate, requireTeamMember);
  *               stage: { type: string, enum: [CUTTING, PRINTING, COLORING, STITCHING, FINISHING] }
  *               ratePerPiece: { type: number, minimum: 0 }
  *               unit: { type: string, default: per piece }
- *               lotNo: { type: string, description: "Optional lot number e.g. LOT-001" }
+ *               lotNo: { type: string, description: "Optional unique lot number e.g. LOT-001" }
  *               department: { type: string, description: "Machine/department within stage e.g. Flatlock Machine" }
  *               departmentType:
  *                 type: string
  *                 enum: [FLATLOCK, OVERLOCK, LOCK_STITCH, IRON, CUTTING_MACHINE, PRINTING_MACHINE, COLORING_MACHINE, OTHER]
  *                 description: "For STITCHING, must be FLATLOCK, OVERLOCK, LOCK_STITCH, or IRON when provided"
  *     responses:
+ *       409:
+ *         description: Lot No already exists
  *       201:
  *         description: Created operation
  */
@@ -160,6 +162,8 @@ router.patch(
  *     responses:
  *       200:
  *         description: Updated operation, with note if rate changed
+ *       409:
+ *         description: Lot No already exists
  */
 router.get("/operations/:id", validate(idParamsSchema, "params"), controller.getById);
 router.put(

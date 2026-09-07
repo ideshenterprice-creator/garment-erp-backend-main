@@ -836,7 +836,7 @@ async function main(): Promise<void> {
       name: "Flatlock",
       stage: "STITCHING",
       ratePerPiece: 0.55,
-      lotNo: "LOT-001",
+      lotNo: "LOT-002",
       department: "Flatlock Machine",
       departmentType: "FLATLOCK",
     },

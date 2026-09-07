@@ -146,7 +146,20 @@ enum ProductionEntryType {
 
 enum PaymentStatus {
   PENDING
+  PARTIALLY_PAID
   PAID
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  PAYMENT
+  STATUS_CHANGE
+  ASSIGN_OPERATION
+  PRODUCTION_ENTRY
+  LOGIN
+  LOGOUT
 }
 
 enum BoxStatus {
@@ -193,8 +206,10 @@ model User {
   stockTransactions StockTransaction[]
   issuesCreated     IssueRecord[]
   vouchersCreated   Voucher[]
-  notifications     Notification[]
-  filesUploaded     FileAttachment[]
+  notifications              Notification[]
+  filesUploaded              FileAttachment[]
+  auditLogs                  AuditLog[]
+  karigarPaymentTransactions KarigarPaymentTransaction[]
 
   @@index([email])
   @@index([role])
@@ -239,8 +254,9 @@ model Party {
   coloringEntries    ColoringEntry[]     @relation("ColoringKarigar")
   stitchingEntries   StitchingEntry[]    @relation("StitchingKarigar")
   finishingEntries   FinishingEntry[]    @relation("FinishingKarigar")
-  karigarPayments    KarigarPayment[]    @relation("KarigarPaymentParty")
-  buyerContainers    Container[]         @relation("ContainerBuyer")
+  karigarPayments            KarigarPayment[]            @relation("KarigarPaymentParty")
+  karigarPaymentTransactions KarigarPaymentTransaction[] @relation("KarigarPaymentTransactionParty")
+  buyerContainers            Container[]                 @relation("ContainerBuyer")
   buyerSalesBills    SalesBill[]         @relation("SalesBuyer")
   creditDebitNotes   CreditDebitNote[]   @relation("NoteBuyer")
   supplierPayments   SupplierPayment[]   @relation("SupplierPaymentParty")
@@ -292,7 +308,7 @@ model Operation {
   operationCode  String               @unique
   name           String
   stage          ProductionStage
-  lotNo          String?
+  lotNo          String?              @unique
   department     String?
   departmentType OperationDepartment?
   ratePerPiece   Decimal              @db.Decimal(12, 2)
@@ -361,19 +377,36 @@ model FileAttachment {
   @@index([uploadedById])
 }
 
+model Designation {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  karigarProfiles KarigarProfile[]
+
+  @@index([isActive])
+}
+
 model KarigarProfile {
   id            String      @id @default(uuid())
   partyId       String      @unique
+  designationId String?
   paymentType   PaymentType
   weeklySalary  Decimal?    @db.Decimal(12, 2)
   isActive      Boolean     @default(true)
   createdAt     DateTime    @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
 
-  party      Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  operations KarigarOperation[]
+  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  designation Designation?       @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  operations  KarigarOperation[]
 
   @@index([paymentType])
+  @@index([designationId])
 }
 
 model KarigarOperation {
@@ -718,6 +751,7 @@ model KarigarPayment {
   piecesCompleted     Int
   ratePerPiece        Decimal             @db.Decimal(12, 2)
   amountDue           Decimal             @db.Decimal(12, 2)
+  amountPaid          Decimal             @default(0) @db.Decimal(12, 2)
   weekNumber          Int
   year                Int
   status              PaymentStatus       @default(PENDING)
@@ -727,13 +761,53 @@ model KarigarPayment {
   createdAt           DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
 
-  karigar   Party          @relation("KarigarPaymentParty", fields: [karigarId], references: [id], onDelete: Restrict)
-  po        PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
-  operation Operation      @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  karigar      Party                       @relation("KarigarPaymentParty", fields: [karigarId], references: [id], onDelete: Restrict)
+  po           PurchaseOrder?              @relation(fields: [poId], references: [id], onDelete: SetNull)
+  operation    Operation                   @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  transactions KarigarPaymentTransaction[]
 
   @@index([karigarId])
   @@index([status])
   @@index([year, weekNumber])
+}
+
+model KarigarPaymentTransaction {
+  id               String   @id @default(uuid())
+  karigarPaymentId String
+  karigarId        String
+  amountPaid       Decimal  @db.Decimal(12, 2)
+  paymentDate      DateTime @db.Timestamptz(6)
+  paymentMode      String
+  referenceNo      String?
+  notes            String?
+  createdById      String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+
+  karigarPayment KarigarPayment @relation(fields: [karigarPaymentId], references: [id], onDelete: Restrict)
+  karigar        Party          @relation("KarigarPaymentTransactionParty", fields: [karigarId], references: [id], onDelete: Restrict)
+  createdBy      User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([karigarPaymentId])
+  @@index([karigarId])
+  @@index([paymentDate])
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  entity    String
+  entityId  String
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model BoxPacking {

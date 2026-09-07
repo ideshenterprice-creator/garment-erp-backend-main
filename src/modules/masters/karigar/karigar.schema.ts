@@ -38,6 +38,7 @@ function refinePaymentRules(
 export const karigarCreateSchema = z
   .object({
     partyId: z.string().uuid(),
+    designationId: z.string().uuid().optional(),
     paymentType: paymentTypeEnum,
     weeklySalary: z.coerce.number().optional(),
     operationIds: z.array(z.string().uuid()).optional(),
@@ -47,6 +48,7 @@ export const karigarCreateSchema = z
 export const karigarUpdateSchema = z
   .object({
     partyId: z.string().uuid().optional(),
+    designationId: z.string().uuid().nullable().optional(),
     paymentType: paymentTypeEnum.optional(),
     weeklySalary: z.coerce.number().optional(),
     operationIds: z.array(z.string().uuid()).optional(),
@@ -59,6 +61,8 @@ export const karigarStatusSchema = z.object({
 
 export const karigarListQuerySchema = z.object({
   paymentType: paymentTypeEnum.optional(),
+  designationId: z.string().uuid().optional(),
+  search: z.string().optional(),
   isActive: z
     .enum(["true", "false"])
     .transform((value) => value === "true")
@@ -70,9 +74,15 @@ export const karigarListQuerySchema = z.object({
 export const karigarPaymentsQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
-  status: z.enum(["PENDING", "PAID"]).optional(),
+  status: z.enum(["PENDING", "PARTIALLY_PAID", "PAID"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const karigarWeeklyStatementsQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(52).default(12),
 });
 
 export const idParamsSchema = z.object({
@@ -84,3 +94,4 @@ export type KarigarUpdateInput = z.infer<typeof karigarUpdateSchema>;
 export type KarigarStatusInput = z.infer<typeof karigarStatusSchema>;
 export type KarigarListQuery = z.infer<typeof karigarListQuerySchema>;
 export type KarigarPaymentsQuery = z.infer<typeof karigarPaymentsQuerySchema>;
+export type KarigarWeeklyStatementsQuery = z.infer<typeof karigarWeeklyStatementsQuerySchema>;

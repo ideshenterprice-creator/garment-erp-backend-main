@@ -218,12 +218,12 @@ export async function removeProductionEntry(params: {
     where: {
       productionEntryType: params.type,
       productionEntryId: entry.id,
-      status: "PAID",
+      status: { in: ["PAID", "PARTIALLY_PAID"] },
     },
   });
   if (paid > 0) {
     throw new AppError(
-      "Cannot delete: karigar payment already paid for this entry.",
+      "Cannot delete: karigar payment already recorded for this entry.",
       409,
       "PAYMENT_PAID"
     );

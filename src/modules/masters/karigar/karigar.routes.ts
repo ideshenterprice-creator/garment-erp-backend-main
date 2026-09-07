@@ -10,6 +10,7 @@ import {
   karigarPaymentsQuerySchema,
   karigarStatusSchema,
   karigarUpdateSchema,
+  karigarWeeklyStatementsQuerySchema,
 } from "./karigar.schema";
 
 const router = Router();
@@ -63,6 +64,7 @@ router.use(authenticate, requireTeamMember);
  *         description: Created profile
  */
 router.get("/karigars", validate(karigarListQuerySchema, "query"), controller.list);
+router.get("/karigars/stats", controller.getStats);
 router.post("/karigars", requireAdmin, validate(karigarCreateSchema), controller.create);
 
 /**
@@ -102,6 +104,17 @@ router.get(
   validate(idParamsSchema, "params"),
   validate(karigarPaymentsQuerySchema, "query"),
   controller.listPayments
+);
+router.get(
+  "/karigars/:id/weekly-statements",
+  validate(idParamsSchema, "params"),
+  validate(karigarWeeklyStatementsQuerySchema, "query"),
+  controller.listWeeklyStatements
+);
+router.get(
+  "/karigars/:id/ledger",
+  validate(idParamsSchema, "params"),
+  controller.getLedger
 );
 
 /**

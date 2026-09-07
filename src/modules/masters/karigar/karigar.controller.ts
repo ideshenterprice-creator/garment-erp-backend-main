@@ -8,10 +8,15 @@ import {
   KarigarPaymentsQuery,
   KarigarStatusInput,
   KarigarUpdateInput,
+  KarigarWeeklyStatementsQuery,
 } from "./karigar.schema";
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   successResponse(res, await service.list(req.query as unknown as KarigarListQuery), "Karigar profiles loaded");
+});
+
+export const getStats = asyncHandler(async (_req: Request, res: Response) => {
+  successResponse(res, await service.getStats(), "Karigar stats loaded");
 });
 
 export const getById = asyncHandler(async (req: Request, res: Response) => {
@@ -19,11 +24,20 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const create = asyncHandler(async (req: Request, res: Response) => {
-  successResponse(res, await service.create(req.body as KarigarCreateInput), "Karigar profile created", 201);
+  successResponse(
+    res,
+    await service.create(req.body as KarigarCreateInput, req.user?.userId),
+    "Karigar profile created",
+    201
+  );
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {
-  successResponse(res, await service.update(req.params.id, req.body as KarigarUpdateInput), "Karigar profile updated");
+  successResponse(
+    res,
+    await service.update(req.params.id, req.body as KarigarUpdateInput, req.user?.userId),
+    "Karigar profile updated"
+  );
 });
 
 export const updateStatus = asyncHandler(async (req: Request, res: Response) => {
@@ -44,4 +58,19 @@ export const listPayments = asyncHandler(async (req: Request, res: Response) => 
     await service.listPayments(req.params.id, req.query as unknown as KarigarPaymentsQuery),
     "Karigar payments loaded"
   );
+});
+
+export const listWeeklyStatements = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(
+    res,
+    await service.listWeeklyStatements(
+      req.params.id,
+      req.query as unknown as KarigarWeeklyStatementsQuery
+    ),
+    "Karigar weekly statements loaded"
+  );
+});
+
+export const getLedger = asyncHandler(async (req: Request, res: Response) => {
+  successResponse(res, await service.getLedger(req.params.id), "Karigar ledger loaded");
 });
