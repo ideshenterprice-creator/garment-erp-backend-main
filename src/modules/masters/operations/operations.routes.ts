@@ -33,6 +33,17 @@ router.use(authenticate, requireTeamMember);
  *         name: search
  *         schema: { type: string }
  *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: departmentType
+ *         schema:
+ *           type: string
+ *           enum: [FLATLOCK, OVERLOCK, LOCK_STITCH, IRON, CUTTING_MACHINE, PRINTING_MACHINE, COLORING_MACHINE, OTHER]
+ *       - in: query
+ *         name: lotNo
+ *         schema: { type: string }
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query
@@ -58,6 +69,12 @@ router.use(authenticate, requireTeamMember);
  *               stage: { type: string, enum: [CUTTING, PRINTING, COLORING, STITCHING, FINISHING] }
  *               ratePerPiece: { type: number, minimum: 0 }
  *               unit: { type: string, default: per piece }
+ *               lotNo: { type: string, description: "Optional lot number e.g. LOT-001" }
+ *               department: { type: string, description: "Machine/department within stage e.g. Flatlock Machine" }
+ *               departmentType:
+ *                 type: string
+ *                 enum: [FLATLOCK, OVERLOCK, LOCK_STITCH, IRON, CUTTING_MACHINE, PRINTING_MACHINE, COLORING_MACHINE, OTHER]
+ *                 description: "For STITCHING, must be FLATLOCK, OVERLOCK, LOCK_STITCH, or IRON when provided"
  *     responses:
  *       201:
  *         description: Created operation
@@ -125,6 +142,21 @@ router.patch(
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               stage: { type: string, enum: [CUTTING, PRINTING, COLORING, STITCHING, FINISHING] }
+ *               ratePerPiece: { type: number, minimum: 0 }
+ *               unit: { type: string }
+ *               lotNo: { type: string }
+ *               department: { type: string }
+ *               departmentType:
+ *                 type: string
+ *                 enum: [FLATLOCK, OVERLOCK, LOCK_STITCH, IRON, CUTTING_MACHINE, PRINTING_MACHINE, COLORING_MACHINE, OTHER]
  *     responses:
  *       200:
  *         description: Updated operation, with note if rate changed

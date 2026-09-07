@@ -8,6 +8,15 @@ type PartyType = "BUYER" | "SUPPLIER" | "KARIGAR";
 type ProductCategory = "RAW_MATERIAL" | "FINISHED_GOOD" | "ACCESSORY" | "WASTAGE";
 type UnitOfMeasure = "KG" | "PCS" | "METERS" | "ROLLS";
 type ProductionStage = "CUTTING" | "PRINTING" | "COLORING" | "STITCHING" | "FINISHING";
+type OperationDepartment =
+  | "FLATLOCK"
+  | "OVERLOCK"
+  | "LOCK_STITCH"
+  | "IRON"
+  | "CUTTING_MACHINE"
+  | "PRINTING_MACHINE"
+  | "COLORING_MACHINE"
+  | "OTHER";
 type SizeLabel =
   | "SIZE_0_3M"
   | "SIZE_3_6M"
@@ -151,6 +160,9 @@ async function upsertOperation(input: {
   ratePerPiece: number;
   unit?: UnitOfMeasure;
   isActive?: boolean;
+  lotNo?: string;
+  department?: string;
+  departmentType?: OperationDepartment;
 }): Promise<string> {
   const existingByCode = await prisma.operation.findUnique({
     where: { operationCode: input.operationCode },
@@ -167,6 +179,9 @@ async function upsertOperation(input: {
     ratePerPiece: d(input.ratePerPiece),
     unit: input.unit ?? "PCS",
     isActive: input.isActive ?? true,
+    lotNo: input.lotNo,
+    department: input.department,
+    departmentType: input.departmentType,
   };
 
   const operation = existing
@@ -798,14 +813,42 @@ async function main(): Promise<void> {
     name: string;
     stage: ProductionStage;
     ratePerPiece: number;
+    department?: string;
+    departmentType?: OperationDepartment;
   }> = [
     { mockId: "op-1", operationCode: "OP-001", name: "Pattern Cutting", stage: "CUTTING", ratePerPiece: 1.5 },
     { mockId: "op-2", operationCode: "OP-002", name: "Fabric Cutting", stage: "CUTTING", ratePerPiece: 3.2 },
     { mockId: "op-3", operationCode: "OP-003", name: "Screen Printing", stage: "PRINTING", ratePerPiece: 4.0 },
     { mockId: "op-4", operationCode: "OP-004", name: "Fabric Dyeing", stage: "COLORING", ratePerPiece: 2.75 },
-    { mockId: "op-5", operationCode: "OP-005", name: "Overlock", stage: "STITCHING", ratePerPiece: 0.4 },
-    { mockId: "op-6", operationCode: "OP-006", name: "Flatlock", stage: "STITCHING", ratePerPiece: 0.55 },
-    { mockId: "op-7", operationCode: "OP-007", name: "Lock Stitch", stage: "STITCHING", ratePerPiece: 0.35 },
+    {
+      mockId: "op-5",
+      operationCode: "OP-005",
+      name: "Overlock",
+      stage: "STITCHING",
+      ratePerPiece: 0.4,
+      lotNo: "LOT-001",
+      department: "Overlock Machine",
+      departmentType: "OVERLOCK",
+    },
+    {
+      mockId: "op-6",
+      operationCode: "OP-006",
+      name: "Flatlock",
+      stage: "STITCHING",
+      ratePerPiece: 0.55,
+      lotNo: "LOT-001",
+      department: "Flatlock Machine",
+      departmentType: "FLATLOCK",
+    },
+    {
+      mockId: "op-7",
+      operationCode: "OP-007",
+      name: "Lock Stitch",
+      stage: "STITCHING",
+      ratePerPiece: 0.35,
+      department: "Lock Stitch Machine",
+      departmentType: "LOCK_STITCH",
+    },
     { mockId: "op-8", operationCode: "OP-008", name: "Ripping", stage: "STITCHING", ratePerPiece: 0.25 },
     { mockId: "op-9", operationCode: "OP-009", name: "Thread Cutting", stage: "FINISHING", ratePerPiece: 0.2 },
     { mockId: "op-10", operationCode: "OP-010", name: "Ironing & Pack", stage: "FINISHING", ratePerPiece: 1.1 },
@@ -815,11 +858,43 @@ async function main(): Promise<void> {
     { mockId: "prod-op-side", operationCode: "OP-014", name: "Side Seam", stage: "STITCHING", ratePerPiece: 0.55 },
     { mockId: "prod-op-sleeve", operationCode: "OP-015", name: "Sleeve Attach", stage: "STITCHING", ratePerPiece: 0.6 },
     { mockId: "prod-op-collar", operationCode: "OP-016", name: "Collar Prep", stage: "STITCHING", ratePerPiece: 0.45 },
-    { mockId: "prod-op-overlock", operationCode: "OP-017", name: "Overlock (Prod)", stage: "STITCHING", ratePerPiece: 1.0 },
+    {
+      mockId: "prod-op-overlock",
+      operationCode: "OP-017",
+      name: "Overlock (Prod)",
+      stage: "STITCHING",
+      ratePerPiece: 1.0,
+      department: "Overlock Machine",
+      departmentType: "OVERLOCK",
+    },
     { mockId: "prod-op-bottom", operationCode: "OP-018", name: "Bottom Hem", stage: "STITCHING", ratePerPiece: 0.5 },
-    { mockId: "prod-op-flatlock", operationCode: "OP-019", name: "Flatlock (Prod)", stage: "STITCHING", ratePerPiece: 0.55 },
-    { mockId: "prod-op-lock", operationCode: "OP-020", name: "Lock Stitch (Prod)", stage: "STITCHING", ratePerPiece: 0.35 },
-    { mockId: "prod-op-iron", operationCode: "OP-021", name: "Ironing", stage: "FINISHING", ratePerPiece: 0.3 },
+    {
+      mockId: "prod-op-flatlock",
+      operationCode: "OP-019",
+      name: "Flatlock (Prod)",
+      stage: "STITCHING",
+      ratePerPiece: 0.55,
+      department: "Flatlock Machine",
+      departmentType: "FLATLOCK",
+    },
+    {
+      mockId: "prod-op-lock",
+      operationCode: "OP-020",
+      name: "Lock Stitch (Prod)",
+      stage: "STITCHING",
+      ratePerPiece: 0.35,
+      department: "Lock Stitch Machine",
+      departmentType: "LOCK_STITCH",
+    },
+    {
+      mockId: "prod-op-iron",
+      operationCode: "OP-021",
+      name: "Ironing",
+      stage: "FINISHING",
+      ratePerPiece: 0.3,
+      department: "Iron Department",
+      departmentType: "IRON",
+    },
     { mockId: "prod-op-poly", operationCode: "OP-022", name: "Poly Packing", stage: "FINISHING", ratePerPiece: 0.25 },
     { mockId: "prod-op-gift", operationCode: "OP-023", name: "Gift Packing", stage: "FINISHING", ratePerPiece: 0.4 },
     { mockId: "prod-op-hanger", operationCode: "OP-024", name: "Hanger Attachment", stage: "FINISHING", ratePerPiece: 0.2 },

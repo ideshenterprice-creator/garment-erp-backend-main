@@ -1,4 +1,4 @@
-import { Prisma, UnitOfMeasure } from "@prisma/client";
+import { OperationDepartment, Prisma, UnitOfMeasure } from "@prisma/client";
 import prisma from "@/config/database";
 import logger from "@/config/logger";
 import { AppError } from "@/middleware/errorHandler";
@@ -44,6 +44,15 @@ export async function list(query: OperationListQuery) {
   if (query.search) {
     where.name = { contains: query.search, mode: "insensitive" };
   }
+  if (query.department) {
+    where.department = { contains: query.department, mode: "insensitive" };
+  }
+  if (query.departmentType) {
+    where.departmentType = query.departmentType as OperationDepartment;
+  }
+  if (query.lotNo) {
+    where.lotNo = { contains: query.lotNo, mode: "insensitive" };
+  }
 
   const [rows, total] = await prisma.$transaction([
     prisma.operation.findMany({
@@ -80,6 +89,9 @@ export async function create(input: OperationCreateInput) {
       stage: input.stage,
       ratePerPiece: input.ratePerPiece,
       unit: toUnitOfMeasure(input.unit),
+      lotNo: input.lotNo,
+      department: input.department,
+      departmentType: input.departmentType,
     },
   });
   return withRateLock(operation);
@@ -110,6 +122,9 @@ export async function update(id: string, input: OperationUpdateInput) {
       stage: input.stage,
       ratePerPiece: input.ratePerPiece,
       unit: input.unit !== undefined ? toUnitOfMeasure(input.unit) : undefined,
+      lotNo: input.lotNo,
+      department: input.department,
+      departmentType: input.departmentType,
     },
   });
 
