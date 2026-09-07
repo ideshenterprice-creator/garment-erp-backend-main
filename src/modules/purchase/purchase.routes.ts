@@ -69,6 +69,7 @@ router.use(authenticate, requireTeamMember);
  *               grossWeight: { type: number }
  *               tareWeight: { type: number }
  *               ratePerKg: { type: number }
+ *               gstPercent: { type: number, minimum: 0, maximum: 100 }
  *     responses:
  *       201:
  *         description: Created pending bill

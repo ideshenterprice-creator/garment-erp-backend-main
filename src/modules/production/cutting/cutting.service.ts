@@ -100,7 +100,12 @@ export async function create(input: CuttingCreateInput, userId: string) {
   await requireKarigar(input.karigarId);
   const operation = await findAssignedOperation(input.karigarId, "CUTTING");
   const totalPiecesCut = itemTotal(input);
-  const fabricIssuedKg = bundle.issue ? Number(bundle.issue.quantityIssued) : 0;
+  const fabricIssuedKg =
+    input.fabricIssuedKg != null
+      ? input.fabricIssuedKg
+      : bundle.issue
+        ? Number(bundle.issue.quantityIssued)
+        : 0;
   const entryNumber = await generateEntryNumber(prisma, "CUT");
   const fgProduct = await findFinishedGoodProduct();
 

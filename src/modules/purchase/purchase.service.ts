@@ -208,7 +208,8 @@ export async function create(input: PurchaseCreateInput) {
   }
 
   const netWeight = round3(input.grossWeight - input.tareWeight);
-  const gstPercent = await resolveGstPercent();
+  const gstPercent =
+    input.gstPercent != null ? input.gstPercent : await resolveGstPercent();
   const taxable = round2(netWeight * input.ratePerKg);
   const gstAmount = round2(taxable * (gstPercent / 100));
   const totalAmount = round2(taxable + gstAmount);

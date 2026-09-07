@@ -10,6 +10,7 @@ export const purchaseCreateSchema = z.object({
   grossWeight: z.coerce.number().positive(),
   tareWeight: z.coerce.number().min(0),
   ratePerKg: z.coerce.number().positive(),
+  gstPercent: z.coerce.number().min(0).max(100).optional(),
 });
 
 export const purchaseReturnSchema = z.object({

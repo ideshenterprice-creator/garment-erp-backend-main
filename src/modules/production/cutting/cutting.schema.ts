@@ -14,6 +14,7 @@ export const cuttingCreateSchema = z.object({
   qty_9_12M: qty,
   qty_12_18M: qty,
   qty_18_24M: qty,
+  fabricIssuedKg: z.coerce.number().min(0).optional(),
   wastageKg: z.coerce.number().min(0),
 });
 
